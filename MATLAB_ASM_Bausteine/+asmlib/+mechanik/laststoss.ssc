@@ -1,0 +1,49 @@
+component laststoss
+% Laststoß
+% Sprungförmige Laständerung um ΔM_L zum Zeitpunkt t_stoß, wirkt gegen die Relativdrehung.
+%
+% Gleichung:  M_L = ΔM_L·σ(t − t_stoß)·sgn(Ω)
+% Der Sprung σ ist geglättet: σ ≈ ½·(1 + tanh((t − t_stoß)/0,5 ms)), Anstiegszeit ≈ 2 ms.
+% Ein idealer Sprung lässt den Solver am Sprung hängen (vgl. doku/VALIDIERUNG.md, Befund 4).
+% sgn(Ω) ist mit tanh(Ω/0,1 rad/s) geglättet.
+% Quelle: Densborn, Skript "DS-Asynchron-Motor", Folien 53-54
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  parameters
+    t_stoss = {1, 's'};        % Zeitpunkt des Laststoßes t_stoß
+    dM_L    = {7.95, 'N*m'};   % Höhe des Laststoßes ΔM_L
+  end
+
+  parameters(ExternalAccess = none)
+    t_r   = {0.5e-3, 's'};     % Glättung des Sprungs
+    w_eps = {0.1, 'rad/s'};    % Glättung der Vorzeichenfunktion
+  end
+
+  equations
+    assert(t_stoss >= 0, 'Zeitpunkt t_stoß darf nicht negativ sein.');
+  end
+
+  variables
+    t = {0, 'N*m'};   % Lastmoment (aufgenommen)
+    w = {0, 'rad/s'}; % Relativdrehzahl
+  end
+
+  branches
+    t : R.t -> C.t;
+  end
+
+  annotations
+    [R] : Side = left;
+    [C] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    t == dM_L*0.5*(1 + tanh((time - t_stoss)/t_r))*tanh(w/w_eps);
+  end
+
+end

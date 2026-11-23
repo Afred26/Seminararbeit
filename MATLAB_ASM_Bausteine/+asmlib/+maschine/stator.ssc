@@ -1,0 +1,80 @@
+component stator
+% Stator
+% Statorwicklung mit drei Strängen U1-U2, V1-V2, W1-W2 (Widerstand R1, Streuinduktivität L1σ).
+% Der Port LS koppelt an den Luftspalt: Der Stator speist den Strom i1 (αβ) in den Luftspalt
+% ein und sieht die Hauptflussverkettung ψh.
+%
+% Gleichungen (Raumzeiger, amplitudeninvariant, statorfest; Zählpfeile: Verbraucher,
+% Strangstrom von k1 nach k2):
+%   u1 = R1·i1 + dψ1/dt,   ψ1 = L1σ·i1 + ψh
+%   u0 = R1·i0 + L1σ·di0/dt                    (Nullsystem)
+%   x = 2/3·(x_U + a·x_V + a²·x_W),  a = e^(j2π/3),  x0 = (x_U + x_V + x_W)/3
+% Zustandsgrößen: ψ1 (αβ) und i0. Anfangszustand: stromlos (ψ1 = 0 bei ψh = 0, i0 = 0).
+% Quelle: Hagl, R.: Elektrische Antriebstechnik. Hanser, München 2013
+
+  nodes
+    U1 = foundation.electrical.electrical; % U1
+    V1 = foundation.electrical.electrical; % V1
+    W1 = foundation.electrical.electrical; % W1
+    U2 = foundation.electrical.electrical; % U2
+    V2 = foundation.electrical.electrical; % V2
+    W2 = foundation.electrical.electrical; % W2
+    LS = asmlib.luftspalt; % LS
+  end
+
+  outputs
+    i1 = {zeros(2, 1), 'A'}; % i1
+    u1 = {zeros(2, 1), 'V'}; % u1
+  end
+
+  parameters
+    R1  = {0.5, 'Ohm'};       % Statorwiderstand R1
+    L1s = {9.902e-3, 'H'};    % Statorstreuinduktivität L1σ
+  end
+
+  equations
+    assert(R1 > 0, 'Statorwiderstand R1 muss > 0 sein.');
+    assert(L1s > 0, 'Statorstreuinduktivität L1σ muss > 0 sein.');
+  end
+
+  variables
+    iU = {0, 'A'};                % Strangstrom U
+    iV = {0, 'A'};                % Strangstrom V
+    iW = {0, 'A'};                % Strangstrom W
+    i1ab = {zeros(2, 1), 'A'};    % Statorstrom-Raumzeiger (αβ), fließt in den Luftspalt
+    psih = {zeros(2, 1), 'Wb'};   % Hauptflussverkettung (αβ)
+    psi1 = {value = {zeros(2, 1), 'Wb'}, priority = priority.high};   % Statorflussverkettung ψ1
+    i0 = {value = {0, 'A'}, priority = priority.high};                % Nullstrom
+  end
+
+  branches
+    iU : U1.i -> U2.i;
+    iV : V1.i -> V2.i;
+    iW : W1.i -> W2.i;
+    i1ab : * -> LS.i;
+  end
+
+  annotations
+    [U1, V1, W1, U2, V2, W2] : Side = left;
+    [LS, i1, u1] : Side = right;
+  end
+
+  equations
+    psih == LS.psi;
+    i1ab == [2/3*(iU - iV/2 - iW/2); (iV - iW)/sqrt(3)];
+    i0 == (iU + iV + iW)/3;
+    let
+      uU = U1.v - U2.v;
+      uV = V1.v - V2.v;
+      uW = W1.v - W2.v;
+      uab = [2/3*(uU - uV/2 - uW/2); (uV - uW)/sqrt(3)];
+    in
+      uab == R1*i1ab + psi1.der;
+      (uU + uV + uW)/3 == R1*i0 + L1s*i0.der;
+      u1 == uab;
+    end
+    psi1 == L1s*i1ab + psih;
+    i1 == i1ab;
+  end
+
+end

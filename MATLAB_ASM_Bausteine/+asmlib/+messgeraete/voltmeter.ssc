@@ -1,0 +1,28 @@
+component voltmeter
+% Voltmeter
+% Idealer Spannungsmesser (Innenwiderstand unendlich), parallel schalten. u = v_p − v_n.
+% Die Komponente liefert Augenblickswerte; den Effektivwert bildet der Baustein in Simulink:
+%   U_eff = √( f_mess·∫_{t−T}^{t} u² dt ),  T = 1/f_mess  (gleitendes Fenster)
+% Quelle: Hagl, R.: Elektrische Antriebstechnik. Hanser, München 2013
+
+  nodes
+    p = foundation.electrical.electrical; % p
+    n = foundation.electrical.electrical; % n
+  end
+
+  outputs
+    u = {0, 'V'}; % u
+    u2 = {0, 'V^2'}; % u²
+  end
+
+  annotations
+    [p] : Side = left;
+    [n, u, u2] : Side = right;
+  end
+
+  equations
+    u == p.v - n.v;
+    u2 == (p.v - n.v)^2;
+  end
+
+end

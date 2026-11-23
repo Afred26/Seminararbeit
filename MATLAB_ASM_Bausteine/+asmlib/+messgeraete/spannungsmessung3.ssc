@@ -1,0 +1,53 @@
+component spannungsmessung3
+% Spannungsmessung 3~
+% Dreiphasige Spannungsmessung (Innenwiderstand unendlich), parallel anschließen.
+% Strangspannungen wahlweise gegen den künstlichen Sternpunkt (Mittelwert von a, b, c) oder
+% gegen den Anschluss n (dann muss n angeschlossen sein).
+%
+% Gleichungen:
+%   u_str = [v_a − v_m; v_b − v_m; v_c − v_m],  v_m = (v_a + v_b + v_c)/3 bzw. v_m = v_n
+%   u_leiter = [v_a − v_b; v_b − v_c; v_c − v_a]
+%   u2 = (u_ab² + u_bc² + u_ca²)/3;  daraus bildet der Baustein in Simulink
+%   U_eff = √( f_mess·∫_{t−T}^{t} u2 dt )  (Effektivwert der Leiterspannung; symmetrisch U = √3·U_Str)
+% Quelle: Densborn, Skript "Drehstrom & Drehfeld", Folien 11-16
+
+  nodes
+    a = foundation.electrical.electrical; % a
+    b = foundation.electrical.electrical; % b
+    c = foundation.electrical.electrical; % c
+    n = foundation.electrical.electrical; % n
+  end
+
+  outputs
+    u_str = {zeros(3, 1), 'V'}; % u_str
+    u_leiter = {zeros(3, 1), 'V'}; % u_leiter
+    u2 = {0, 'V^2'}; % u²
+  end
+
+  parameters
+    bezug = 1;   % Bezug der Strangspannung: 1 = künstlicher Sternpunkt, 2 = Anschluss n
+  end
+
+  equations
+    assert(bezug == 1 || bezug == 2, 'Bezug muss 1 oder 2 sein.');
+  end
+
+  annotations
+    [a, b, c, n] : Side = left;
+    [u_str, u_leiter, u2] : Side = right;
+  end
+
+  equations
+    let
+      vm  = if bezug == 1, (a.v + b.v + c.v)/3 else n.v end;
+      uab = a.v - b.v;
+      ubc = b.v - c.v;
+      uca = c.v - a.v;
+    in
+      u_str == [a.v - vm; b.v - vm; c.v - vm];
+      u_leiter == [uab; ubc; uca];
+      u2 == (uab^2 + ubc^2 + uca^2)/3;
+    end
+  end
+
+end

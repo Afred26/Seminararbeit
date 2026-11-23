@@ -1,0 +1,46 @@
+component last_konstant
+% Last konstant
+% Konstantes Lastmoment (Hubwerk, Förderband), wirkt stets gegen die Relativdrehung R gegen C.
+%
+% Gleichung:  M_L = M_L0·sgn(Ω),  Ω = Ω_R − Ω_C
+% Die Vorzeichenfunktion ist geglättet: sgn(Ω) ≈ tanh(Ω/Ω_ε), Ω_ε = 0,1 rad/s (≈ 1 1/min),
+% damit der Solver im Stillstand nicht zwischen den Vorzeichen springt.
+% Quelle: Densborn, Skript "DS-Asynchron-Motor", Folien 47-56
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  parameters
+    M_L0 = {13.25, 'N*m'};   % Lastmoment M_L0
+  end
+
+  parameters(ExternalAccess = none)
+    w_eps = {0.1, 'rad/s'};  % Glättung der Vorzeichenfunktion
+  end
+
+  equations
+    assert(M_L0 >= 0, 'Lastmoment M_L0 darf nicht negativ sein.');
+  end
+
+  variables
+    t = {0, 'N*m'};   % Lastmoment (aufgenommen)
+    w = {0, 'rad/s'}; % Relativdrehzahl
+  end
+
+  branches
+    t : R.t -> C.t;
+  end
+
+  annotations
+    [R] : Side = left;
+    [C] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    t == M_L0*tanh(w/w_eps);
+  end
+
+end

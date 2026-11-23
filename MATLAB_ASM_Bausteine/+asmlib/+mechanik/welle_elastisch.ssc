@@ -1,0 +1,45 @@
+component welle_elastisch
+% Welle elastisch
+% Drehelastische Welle bzw. Kupplung (Feder-Dämpfer) zwischen R und C.
+%
+% Gleichung:  M = c·(ϑ_R − ϑ_C) + d·(Ω_R − Ω_C),  M wird von R nach C übertragen.
+% Anfangszustand: unverdrillt.
+% Quelle: Hagl, R.: Elektrische Antriebstechnik. Hanser, München 2013
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  parameters
+    c_W = {1e4, 'N*m/rad'};     % Drehsteifigkeit c
+    d_W = {1, 'N*m*s/rad'};     % Dämpfung d
+  end
+
+  equations
+    assert(c_W > 0, 'Drehsteifigkeit c muss > 0 sein.');
+    assert(d_W >= 0, 'Dämpfung d darf nicht negativ sein.');
+  end
+
+  variables
+    t   = {0, 'N*m'};                                       % übertragenes Moment
+    w   = {0, 'rad/s'};                                     % Relativdrehzahl
+    phi = {value = {0, 'rad'}, priority = priority.high};   % Verdrillwinkel
+  end
+
+  branches
+    t : R.t -> C.t;
+  end
+
+  annotations
+    [R] : Side = left;
+    [C] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    phi.der == w;
+    t == c_W*phi + d_W*w;
+  end
+
+end

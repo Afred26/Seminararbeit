@@ -1,0 +1,53 @@
+component strommessung3
+% Strommessung 3~
+% Dreiphasige Strommessung (Innenwiderstand 0), in Reihe in die drei Leiter schalten.
+% Positiver Strom fließt vom Eingang (a_ein ...) zum Ausgang (a_aus ...).
+%
+% Gleichungen:
+%   i1 = 2/3·(i_a + a·i_b + a²·i_c)   (Raumzeiger, αβ),  a = e^(j2π/3)
+%   i2 = (i_a² + i_b² + i_c²)/3;  daraus bildet der Baustein in Simulink
+%   I_eff = √( f_mess·∫_{t−T}^{t} i2 dt ),  T = 1/f_mess  (quadratischer Mittelwert der Leiter)
+% Quelle: Densborn, Skript "Drehstrom & Drehfeld"; Hagl, R.: Elektrische Antriebstechnik. Hanser 2013
+
+  nodes
+    a_ein = foundation.electrical.electrical; % a ein
+    b_ein = foundation.electrical.electrical; % b ein
+    c_ein = foundation.electrical.electrical; % c ein
+    a_aus = foundation.electrical.electrical; % a aus
+    b_aus = foundation.electrical.electrical; % b aus
+    c_aus = foundation.electrical.electrical; % c aus
+  end
+
+  outputs
+    i_abc = {zeros(3, 1), 'A'}; % i_abc
+    i1 = {zeros(2, 1), 'A'}; % i1
+    i2 = {0, 'A^2'}; % i²
+  end
+
+  variables
+    ia = {0, 'A'};
+    ib = {0, 'A'};
+    ic = {0, 'A'};
+  end
+
+  branches
+    ia : a_ein.i -> a_aus.i;
+    ib : b_ein.i -> b_aus.i;
+    ic : c_ein.i -> c_aus.i;
+  end
+
+  annotations
+    [a_ein, b_ein, c_ein] : Side = left;
+    [a_aus, b_aus, c_aus, i_abc, i1, i2] : Side = right;
+  end
+
+  equations
+    a_ein.v == a_aus.v;
+    b_ein.v == b_aus.v;
+    c_ein.v == c_aus.v;
+    i_abc == [ia; ib; ic];
+    i1 == [2/3*(ia - ib/2 - ic/2); (ib - ic)/sqrt(3)];
+    i2 == (ia^2 + ib^2 + ic^2)/3;
+  end
+
+end

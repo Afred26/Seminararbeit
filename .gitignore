@@ -1,0 +1,7 @@
+# MATLAB / Simulink Build-Artefakte
+*.asv
+*.slxc
+*.mexw64
+slprj/
+codegen/
+*.autosave

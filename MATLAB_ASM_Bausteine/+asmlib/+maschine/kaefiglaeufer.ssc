@@ -1,0 +1,102 @@
+component kaefiglaeufer
+% Käfigläufer
+% Kurzgeschlossener Käfig mit statorbezogenen Rotorgrößen (R2′, L2σ′) im statorfesten
+% Koordinatensystem, Welle R und Gehäuse C. Der Rotor speist den Strom i2′ (αβ) in den
+% Luftspalt ein.
+%
+% Gleichungen:
+%   0 = R2′·i2′ + dψ2′/dt − j·p·Ω·ψ2′,   ψ2′ = L2σ′·i2′ + ψh
+%   M = 3/2·p·Im{ψh*·i1} = −3/2·p·Im{ψ2′*·i2′}   (Luftspaltmoment)
+%   Wellenmoment an R: M_W = M − k_R·Ω − J_M·dΩ/dt,   Ω = Ω_R − Ω_C,   dϑ/dt = Ω
+%   s = 1 − p·Ω/(2π·f_N);  θ2 = φ_el − p·ϑ bildet der Baustein in Simulink (siehe unten)
+% Anfangszustand: stromlos, Drehzahl n0.
+%
+% Numerik: Die Rotorspannungsgleichung wird intern im rotorfesten System gelöst,
+%   0 = R2′·i2r + dψ2r/dt,   ψ2′ = e^(j·p·ϑ)·ψ2r,   i2′ = e^(j·p·ϑ)·i2r,
+% was mathematisch identisch zur statorfesten Form oben ist. Die Zustände schwingen dann nur
+% mit der Schlupffrequenz s·f1 statt mit f1; so verfälscht der Integrationsfehler des Solvers
+% bei kleinem Schlupf nicht die Schlupffrequenz (bei ode23t, h = 0,1 ms sonst ≈ 0,4 % Momentfehler
+% bei s = 0,02).
+% Quelle: Hagl, R.: Elektrische Antriebstechnik. Hanser, München 2013
+
+  nodes
+    LS = asmlib.luftspalt; % LS
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  outputs
+    i2b = {zeros(2, 1), 'A'}; % i2b
+    M = {0, 'N*m'}; % M
+    Om = {0, 'rad/s'}; % Om
+    th_mech = {0, 'rad'}; % th_mech
+    s = {0, '1'}; % s
+    psi_h = {zeros(2, 1), 'Wb'}; % psi_h (für θ2)
+  end
+
+  parameters
+    R2b  = {1.225, 'Ohm'};        % Rotorwiderstand R2′ (statorbezogen)
+    L2sb = {9.902e-3, 'H'};       % Rotorstreuinduktivität L2σ′ (statorbezogen)
+    p    = {2, '1'};              % Polpaarzahl p
+    f_N  = {50, 'Hz'};            % Bemessungsfrequenz f_N (für den Schlupf)
+    J_M  = {0.012, 'kg*m^2'};     % Trägheitsmoment Motor J_M
+    k_R  = {0, 'N*m*s/rad'};      % Reibbeiwert k_R
+    n0   = {0, 'rpm'};            % Anfangsdrehzahl n0
+  end
+
+  equations
+    assert(R2b > 0, 'Rotorwiderstand R2′ muss > 0 sein.');
+    assert(L2sb > 0, 'Rotorstreuinduktivität L2σ′ muss > 0 sein.');
+    assert(p >= 1, 'Polpaarzahl p muss >= 1 sein.');
+    assert(J_M > 0, 'Trägheitsmoment J_M muss > 0 sein (die Rotordrehzahl ist Zustandsgröße).');
+    assert(k_R >= 0, 'Reibbeiwert k_R darf nicht negativ sein.');
+  end
+
+  variables
+    i2   = {zeros(2, 1), 'A'};                                     % Rotorstrom i2′ (αβ)
+    psih = {zeros(2, 1), 'Wb'};                                    % Hauptflussverkettung (αβ)
+    psi2 = {zeros(2, 1), 'Wb'};                                    % Rotorflussverkettung ψ2′ (αβ, statorfest)
+    psi2r = {value = {zeros(2, 1), 'Wb'}, priority = priority.high}; % ψ2′ rotorfest (Zustand), stromlos
+    th   = {value = {0, 'rad'}, priority = priority.high};         % Drehwinkel ϑ
+    t    = {0, 'N*m'};                                             % Wellenmoment an R
+    Mel  = {0, 'N*m'};                                             % Luftspaltmoment
+  end
+
+  variables(ExternalAccess = observe)
+    w    = {value = n0, priority = priority.high};                 % Winkelgeschwindigkeit Ω (Anfangswert n0)
+  end
+
+  branches
+    i2 : * -> LS.i;
+    t : C.t -> R.t;
+  end
+
+  annotations
+    [LS] : Side = left;
+    [R, C, i2b, M, Om, th_mech, s, psi_h] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    th.der == w;
+    psih == LS.psi;
+    psi2 == psih + L2sb*i2;
+    % Rotorspannungsgleichung im rotorfesten System (Drehung um den el. Rotorwinkel p·ϑ)
+    let
+      c  = cos(p*th);
+      sn = sin(p*th);
+    in
+      psi2 == [c*psi2r(1) - sn*psi2r(2); sn*psi2r(1) + c*psi2r(2)];
+      {[0; 0], 'V'} == R2b*[c*i2(1) + sn*i2(2); -sn*i2(1) + c*i2(2)] + psi2r.der;
+    end
+    Mel == 3/2*p*(psi2(2)*i2(1) - psi2(1)*i2(2));
+    t == Mel - k_R*w - J_M*w.der;
+    i2b == i2;
+    M == Mel;
+    Om == w;
+    th_mech == th;
+    s == 1 - p*w/(2*pi*f_N);
+    psi_h == psih;   % θ2 = ∠ψh − p·ϑ bildet der Baustein in Simulink (atan2 hier würde Ereignisse erzeugen)
+  end
+
+end

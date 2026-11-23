@@ -1,0 +1,77 @@
+component netz3
+% Netz 3~
+% Symmetrisches Drehstromnetz mit herausgeführtem Sternpunkt n, optional mit Innenimpedanz
+% je Leiter (R_N, L_N; beide 0 = starres Netz). Die Spannung liegt ab t >= t_ein an
+% (Einschalten geglättet: e·½·(1 + tanh((t − t_ein)/0,1 ms)), ohne Solver-Ereignis).
+%
+% Gleichungen (Quellenspannungen, Strang = Leiter gegen n):
+%   e_L1 = √2·U/√3·sin(ω1·t + φ0),  e_L2 = √2·U/√3·sin(ω1·t + φ0 − δ),  e_L3 = ... − 2δ
+%   δ = +2π/3 (L1-L2-L3, Rechtsdrehfeld) bzw. −2π/3 (L1-L3-L2, Linksdrehfeld),  ω1 = 2π·f1
+%   u_k = v_k − v_n = e_k − R_N·i_k − L_N·di_k/dt   (Strom i_k fließt aus Klemme k heraus)
+% Quelle: Densborn, Skript "Drehstrom & Drehfeld", Folien 8-12;
+%         Hagl, R.: Elektrische Antriebstechnik. Hanser, München 2013
+
+  nodes
+    a = foundation.electrical.electrical; % a
+    b = foundation.electrical.electrical; % b
+    c = foundation.electrical.electrical; % c
+    n = foundation.electrical.electrical; % n
+  end
+
+  parameters
+    U_L         = {400, 'V'};     % Leiterspannung U (Effektivwert)
+    f1          = {50, 'Hz'};     % Frequenz f1
+    phasenfolge = 1;              % Phasenfolge: 1 = L1-L2-L3, 2 = L1-L3-L2
+    phi0        = {0, 'deg'};     % Nullphasenwinkel von L1
+    t_ein       = {0, 's'};       % Einschaltzeitpunkt
+    R_N         = {0, 'Ohm'};     % Netzinnenwiderstand je Leiter
+    L_N         = {0, 'H'};       % Netzinneninduktivität je Leiter
+  end
+
+  equations
+    assert(U_L >= 0, 'Leiterspannung U darf nicht negativ sein.');
+    assert(f1 > 0, 'Frequenz f1 muss > 0 sein.');
+    assert(phasenfolge == 1 || phasenfolge == 2, 'Phasenfolge muss 1 oder 2 sein.');
+    assert(R_N >= 0 && L_N >= 0, 'R_N und L_N dürfen nicht negativ sein.');
+  end
+
+  variables
+    ia = {0, 'A'};   % Leiterstrom L1 (aus Klemme a heraus)
+    ib = {0, 'A'};   % Leiterstrom L2
+    ic = {0, 'A'};   % Leiterstrom L3
+  end
+
+  branches
+    ia : n.i -> a.i;
+    ib : n.i -> b.i;
+    ic : n.i -> c.i;
+  end
+
+  annotations
+    [a, b, c, n] : Side = right;
+  end
+
+  equations
+    let
+      Uh  = sqrt(2)*U_L/sqrt(3);
+      x   = {2*pi, 'rad'}*f1*time + phi0;
+      d   = if phasenfolge == 1, {2*pi/3, 'rad'} else {-2*pi/3, 'rad'} end;
+      % Einschalten geglättet (Anstieg ≈ 0,4 ms), damit kein Solver-Ereignis entsteht
+      ein = if t_ein > 0, 0.5*(1 + tanh((time - t_ein)/{1e-4, 's'})) else 1 end;
+      ea  = ein*Uh*sin(x);
+      eb  = ein*Uh*sin(x - d);
+      ec  = ein*Uh*sin(x - 2*d);
+    in
+      if L_N > 0
+        a.v - n.v == ea - R_N*ia - L_N*ia.der;
+        b.v - n.v == eb - R_N*ib - L_N*ib.der;
+        c.v - n.v == ec - R_N*ic - L_N*ic.der;
+      else
+        a.v - n.v == ea - R_N*ia;
+        b.v - n.v == eb - R_N*ib;
+        c.v - n.v == ec - R_N*ic;
+      end
+    end
+  end
+
+end

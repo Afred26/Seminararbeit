@@ -1,0 +1,47 @@
+component drehzahlmesser
+% Drehzahlmesser
+% Idealer Drehzahlmesser (Tacho), parallel zwischen Welle R und Bezug C. Nimmt kein Moment auf.
+%
+% Gleichungen:  Ω = Ω_R − Ω_C,  n = 60·Ω/(2π),  dϑ/dt = Ω (ϑ(0) = 0),  s = (ns − n)/ns
+% Quelle: Densborn, Skript "DS-Asynchron-Motor", Folien 45-46
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  outputs
+    n = {0, 'rpm'}; % n
+    Om = {0, 'rad/s'}; % Om
+    th = {0, 'rad'}; % th
+    s = {0, '1'}; % s
+  end
+
+  parameters
+    ns = {1500, 'rpm'};   % Synchrondrehzahl ns (für den Schlupf)
+  end
+
+  equations
+    assert(ns > 0, 'Synchrondrehzahl ns muss > 0 sein.');
+  end
+
+  variables
+    w  = {0, 'rad/s'};
+    ph = {value = {0, 'rad'}, priority = priority.high};   % Drehwinkel ϑ
+  end
+
+  annotations
+    [R] : Side = left;
+    [C, n, Om, th, s] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    ph.der == w;
+    n == w;
+    Om == w;
+    th == ph;
+    s == (ns - w)/ns;
+  end
+
+end

@@ -1,0 +1,53 @@
+component asm_kloss
+% ASM Kloss (quasistationär)
+% Motormoment nach der Kloss-Formel (Teil B des Prototyps): R1 = 0, konstanter Fluss, keine
+% elektrische Dynamik, keine eigene Trägheit (Schwungmasse extern). Nur zur Validierung.
+%
+% Gleichungen:  s = (ns − n)/ns,  M = 2·MK·s·sK / (s² + sK²)
+%   M treibt R gegenüber C an (Motorbetrieb für 0 < s).
+% Quelle: Densborn, Skript "DS-Asynchron-Motor", Folien 47-50;
+%         Hagl, R.: Elektrische Antriebstechnik. Hanser, München 2013
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  outputs
+    M = {0, 'N*m'}; % M
+    s = {0, '1'}; % s
+  end
+
+  parameters
+    MK = {71.55, 'N*m'};   % Kippmoment MK
+    sK = 0.2;              % Kippschlupf sK
+    ns = {1500, 'rpm'};    % Synchrondrehzahl ns
+  end
+
+  equations
+    assert(MK > 0 && sK > 0 && sK <= 1 && ns > 0, 'MK, sK, ns müssen positiv sein (sK <= 1).');
+  end
+
+  variables
+    t  = {0, 'N*m'};   % abgegebenes Moment
+    w  = {0, 'rad/s'};
+    sl = 0;            % Schlupf
+  end
+
+  branches
+    t : C.t -> R.t;
+  end
+
+  annotations
+    [R, C, M, s] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    sl == (ns - w)/ns;
+    t == 2*MK*sl*sK/(sl^2 + sK^2);
+    M == t;
+    s == sl;
+  end
+
+end

@@ -1,0 +1,76 @@
+component klemmbrett
+% Klemmbrett
+% Klemmenkasten: verbindet die Netzleiter a, b, c mit den Wicklungsenden.
+%   schaltung = 1 (Stern):   a-U1, b-V1, c-W1, U2 = V2 = W2 (Sternpunkt, nicht herausgeführt)
+%   schaltung = 2 (Dreieck): a-U1-W2, b-V1-U2, c-W1-V2
+% Die Brücken sind ideale Leiter (Spannung gleich, Strom frei); nicht gesteckte Brücken
+% führen keinen Strom.
+% Quelle: Densborn, Skript "Drehstrom & Drehfeld", Folien 23-26
+
+  nodes
+    a = foundation.electrical.electrical; % a
+    b = foundation.electrical.electrical; % b
+    c = foundation.electrical.electrical; % c
+    U1 = foundation.electrical.electrical; % U1
+    V1 = foundation.electrical.electrical; % V1
+    W1 = foundation.electrical.electrical; % W1
+    U2 = foundation.electrical.electrical; % U2
+    V2 = foundation.electrical.electrical; % V2
+    W2 = foundation.electrical.electrical; % W2
+  end
+
+  parameters
+    schaltung = 1;   % Schaltung: 1 = Stern, 2 = Dreieck
+  end
+
+  equations
+    assert(schaltung == 1 || schaltung == 2, 'Schaltung muss 1 (Stern) oder 2 (Dreieck) sein.');
+  end
+
+  variables
+    i_aU1 = {0, 'A'};   % Brücke a-U1
+    i_bV1 = {0, 'A'};   % Brücke b-V1
+    i_cW1 = {0, 'A'};   % Brücke c-W1
+    i_aW2 = {0, 'A'};   % Brücke a-W2 (Dreieck)
+    i_bU2 = {0, 'A'};   % Brücke b-U2 (Dreieck)
+    i_cV2 = {0, 'A'};   % Brücke c-V2 (Dreieck)
+    i_UV2 = {0, 'A'};   % Brücke U2-V2 (Stern)
+    i_VW2 = {0, 'A'};   % Brücke V2-W2 (Stern)
+  end
+
+  branches
+    i_aU1 : a.i -> U1.i;
+    i_bV1 : b.i -> V1.i;
+    i_cW1 : c.i -> W1.i;
+    i_aW2 : a.i -> W2.i;
+    i_bU2 : b.i -> U2.i;
+    i_cV2 : c.i -> V2.i;
+    i_UV2 : U2.i -> V2.i;
+    i_VW2 : V2.i -> W2.i;
+  end
+
+  annotations
+    [a, b, c] : Side = left;
+    [U1, V1, W1, U2, V2, W2] : Side = right;
+  end
+
+  equations
+    a.v == U1.v;
+    b.v == V1.v;
+    c.v == W1.v;
+    if schaltung == 1
+      i_aW2 == 0;
+      i_bU2 == 0;
+      i_cV2 == 0;
+      U2.v == V2.v;
+      V2.v == W2.v;
+    else
+      a.v == W2.v;
+      b.v == U2.v;
+      c.v == V2.v;
+      i_UV2 == 0;
+      i_VW2 == 0;
+    end
+  end
+
+end

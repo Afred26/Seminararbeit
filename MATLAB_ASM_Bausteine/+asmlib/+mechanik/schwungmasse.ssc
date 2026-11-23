@@ -1,0 +1,43 @@
+component schwungmasse
+% Schwungmasse
+% Starre Schwungmasse gegen das ruhende Bezugssystem (z. B. Trägheit der Arbeitsmaschine J_L).
+%
+% Gleichung:  J·dΩ/dt = Σ M  (Summe der an R angreifenden Momente),  Ω(0) = 2π·n0/60
+% Quelle: Densborn, Skript "DS-Asynchron-Motor", Folie 68 (Hochlaufzeit);
+%         Hagl, R.: Elektrische Antriebstechnik. Hanser, München 2013
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+  end
+
+  parameters
+    J  = {0.01, 'kg*m^2'};   % Trägheitsmoment J
+    n0 = {0, 'rpm'};         % Anfangsdrehzahl n0
+  end
+
+  equations
+    assert(J > 0, 'Trägheitsmoment J muss > 0 sein.');
+  end
+
+  variables
+    t = {0, 'N*m'};          % Beschleunigungsmoment
+  end
+
+  variables(ExternalAccess = observe)
+    w = {value = n0, priority = priority.high};   % Winkelgeschwindigkeit Ω
+  end
+
+  branches
+    t : R.t -> *;
+  end
+
+  annotations
+    [R] : Side = left;
+  end
+
+  equations
+    w == R.w;
+    t == J*w.der;
+  end
+
+end
