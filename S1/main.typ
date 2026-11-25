@@ -41,5 +41,7 @@
 )
 
 
+#include "Texte/Grundlagen.typ"
+
 #include "Texte/lorem_ipsum.typ"
 

@@ -8,5 +8,7 @@
   KI: "Künstliche Inteligenz",
   ISO: "International Organization for Standardization (engl.)",
   IFC: "Industry Foundation Classes (engl.)",
+  ASM: "Asynchronmaschine",
+  ESB: "Ersatzschaltbild",
   
 )
