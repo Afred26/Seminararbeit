@@ -2,7 +2,7 @@
 #import "Zusatz/acronyms.typ": acronyms
 
 #show: supercharged-dhbw.with(
-  title: "Titel der Projektarbeit",
+  title: "Simulation des Drehstrom-Asynchronmotors in MATLAB",
   authors: (
     (name: "Fredrik Schall", student-id: "1194924", course: "TEIT24EE1", course-of-studies: "Elektro- und Informationstechnik", city: "Mannheim"),
   ),
