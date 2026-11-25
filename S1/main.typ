@@ -16,7 +16,7 @@
   foreword: include "Texte/Vorwort.typ",
   supervisor: (company: "Max Musterbetreuer"),
   university: "Duale Hochschule Baden-Württemberg",
-  university-location: "Musterstadt",
+  university-location: "Mannheim",
   university-short: "DHBW",
   // Schriftart anpassen (z.B. "New Computer Modern"):
   font: "Liberation Serif",
