@@ -1,15 +1,13 @@
-#import "@local/templat-projektarbeit:0.1.21": *
+#import "@local/templat-projektarbeit:0.1.22": *
 #import "Zusatz/acronyms.typ": acronyms
 
 #show: supercharged-dhbw.with(
   title: "Titel der Projektarbeit",
   authors: (
-    (name: "Max Mustermann", student-id: "1234567", course: "MUST24XX1", course-of-studies: "Studiengang", company: (
-      (name: "Musterunternehmen GmbH", post-code: "12345", city: "Musterstadt")
-    )),
+    (name: "Fredrik Schall", student-id: "1194924", course: "TEIT24EE1", course-of-studies: "Elektro- und Informationstechnik", city: "Mannheim"),
   ),
   acronyms: acronyms, // displays the acronyms defined in the acronyms dictionary
-  at-university: false, // if true the company name on the title page and the confidentiality statement are hidden
+  at-university: true, // if true the company name on the title page and the confidentiality statement are hidden
   bibliography: bibliography("Zusatz/zotero.bib"),
   date: datetime.today(),
   language: "de", // en, de
