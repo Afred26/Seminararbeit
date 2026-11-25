@@ -1,22 +1,23 @@
-
 #figure(
   caption: [Übersicht über die verwendeten KI-basierten Werkzeuge],
   table(
-  columns: (1.1fr, 4fr),
+    columns: (1.1fr, 4fr),
     inset: 10pt,
-    align: horizon,
-    fill: (_, y) => if y == 0{ luma(200) }
-    else { white },
+    align: (left + horizon, left + horizon),
+    fill: (_, y) => if y == 0 { luma(200) } else { white },
 
-    //Überschrift
-    text("Werkzeug"),             text("Beschreibung der Nutzung"),
+    table.header([*Werkzeug*], [*Beschreibung der Nutzung*]),
 
-    //Körper
-    text("Copilot"),              text("Nutzung für Korrektur- und Formulierungshilfe"),
-    text("Copilot"),              text("Durchsuchen und Zusammenfassen von (Firmen-)Dokumenten"),
-    text("Gemini"),               text("Recherche von allgemeinen Informationen"),
-    text("Google 
-Scholar Labs"),  text("Recherche von Fachtexten"),
+    [Claude Code],
+    [
+      - Unterstützung bei der Erstellung des MATLAB/Simulink-Programms einschließlich Beispielen, Tests, Dokumentation und exportierten Abbildungen (Ordner `MATLAB_ASM_Bausteine`)
+      - Anpassung der Typst-Dokumentvorlage sowie Recherche der formalen Vorgaben der DHBW (gesamt)
+    ],
 
-  )
-)<KI>
+    // Nur einkommentieren, was für diese Arbeit wirklich genutzt wurde,
+    // und möglichst das betroffene Kapitel ergänzen:
+    // [Copilot],             [Korrektur- und Formulierungshilfe (gesamt)],
+    // [Gemini],              [Recherche von allgemeinen Informationen (Kapitel X)],
+    // [Google Scholar Labs], [Recherche von Fachtexten (Kapitel X)],
+  ),
+) <KI>

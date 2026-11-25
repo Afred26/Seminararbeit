@@ -1,4 +1,4 @@
-#import "@local/templat-projektarbeit:0.1.21": *
+#import "@local/templat-projektarbeit:0.1.22": *
 #import "../Zusatz/acronyms.typ": acronyms
 
 = lorem ipsum
