@@ -1,0 +1,76 @@
+component terminal_box
+% Terminal box
+% Connects the line conductors a, b, c with the winding ends.
+%   connection = 1 (star):  a-U1, b-V1, c-W1, U2 = V2 = W2 (star point, not brought out)
+%   connection = 2 (delta): a-U1-W2, b-V1-U2, c-W1-V2
+% The links are ideal conductors (equal voltage, free current); links that are not
+% fitted carry no current.
+% Source: Densborn, lecture notes "Drehstrom & Drehfeld", slides 23-26
+
+  nodes
+    a = foundation.electrical.electrical; % a
+    b = foundation.electrical.electrical; % b
+    c = foundation.electrical.electrical; % c
+    U1 = foundation.electrical.electrical; % U1
+    V1 = foundation.electrical.electrical; % V1
+    W1 = foundation.electrical.electrical; % W1
+    U2 = foundation.electrical.electrical; % U2
+    V2 = foundation.electrical.electrical; % V2
+    W2 = foundation.electrical.electrical; % W2
+  end
+
+  parameters
+    connection = 1;   % winding connection: 1 = star, 2 = delta
+  end
+
+  equations
+    assert(connection == 1 || connection == 2, 'Schaltung muss 1 (Stern) oder 2 (Dreieck) sein.');
+  end
+
+  variables
+    i_aU1 = {0, 'A'};   % link a-U1
+    i_bV1 = {0, 'A'};   % link b-V1
+    i_cW1 = {0, 'A'};   % link c-W1
+    i_aW2 = {0, 'A'};   % link a-W2 (delta)
+    i_bU2 = {0, 'A'};   % link b-U2 (delta)
+    i_cV2 = {0, 'A'};   % link c-V2 (delta)
+    i_UV2 = {0, 'A'};   % link U2-V2 (star)
+    i_VW2 = {0, 'A'};   % link V2-W2 (star)
+  end
+
+  branches
+    i_aU1 : a.i -> U1.i;
+    i_bV1 : b.i -> V1.i;
+    i_cW1 : c.i -> W1.i;
+    i_aW2 : a.i -> W2.i;
+    i_bU2 : b.i -> U2.i;
+    i_cV2 : c.i -> V2.i;
+    i_UV2 : U2.i -> V2.i;
+    i_VW2 : V2.i -> W2.i;
+  end
+
+  annotations
+    [a, b, c] : Side = left;
+    [U1, V1, W1, U2, V2, W2] : Side = right;
+  end
+
+  equations
+    a.v == U1.v;
+    b.v == V1.v;
+    c.v == W1.v;
+    if connection == 1
+      i_aW2 == 0;
+      i_bU2 == 0;
+      i_cV2 == 0;
+      U2.v == V2.v;
+      V2.v == W2.v;
+    else
+      a.v == W2.v;
+      b.v == U2.v;
+      c.v == V2.v;
+      i_UV2 == 0;
+      i_VW2 == 0;
+    end
+  end
+
+end

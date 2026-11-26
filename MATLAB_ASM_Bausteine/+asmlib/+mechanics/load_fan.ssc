@@ -1,0 +1,47 @@
+component load_fan
+% Fan load
+% Quadratic load characteristic (fan, pump), always acts against the relative rotation of R against C.
+%
+% Equation:  M_L = M_B*(n/n_B)*|n/n_B|
+% |x| is computed as sqrt(x^2 + 1e-6) (smooth at standstill, error < 1e-6*M_B above 0.1 % of n_B).
+% Source: Densborn, lecture notes "DS-Asynchron-Motor", slides 47-56
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  parameters
+    M_B = {26.5, 'N*m'};   % reference torque M_B
+    n_B = {1440, 'rpm'};   % reference speed n_B
+  end
+
+  equations
+    assert(M_B >= 0, 'Bezugsmoment M_B darf nicht negativ sein.');
+    assert(n_B > 0, 'Bezugsdrehzahl n_B muss > 0 sein.');
+  end
+
+  variables
+    t = {0, 'N*m'};   % load torque (absorbed)
+    w = {0, 'rad/s'}; % relative speed
+  end
+
+  branches
+    t : R.t -> C.t;
+  end
+
+  annotations
+    [R] : Side = left;
+    [C] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    let
+      x = w/n_B;
+    in
+      t == M_B*x*sqrt(x^2 + 1e-6);
+    end
+  end
+
+end

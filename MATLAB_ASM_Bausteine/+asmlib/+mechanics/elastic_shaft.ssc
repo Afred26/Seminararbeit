@@ -1,0 +1,45 @@
+component elastic_shaft
+% Elastic shaft
+% Torsionally elastic shaft or coupling (spring-damper) between R and C.
+%
+% Equation:  M = c*(th_R - th_C) + d*(Om_R - Om_C),  M is transmitted from R to C.
+% Initial state: untwisted.
+% Source: Hagl, R.: Elektrische Antriebstechnik. Hanser, Muenchen 2013
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  parameters
+    c_W = {1e4, 'N*m/rad'};     % torsional stiffness c
+    d_W = {1, 'N*m*s/rad'};     % damping d
+  end
+
+  equations
+    assert(c_W > 0, 'Drehsteifigkeit c muss > 0 sein.');
+    assert(d_W >= 0, 'Dämpfung d darf nicht negativ sein.');
+  end
+
+  variables
+    t   = {0, 'N*m'};                                       % transmitted torque
+    w   = {0, 'rad/s'};                                     % relative speed
+    phi = {value = {0, 'rad'}, priority = priority.high};   % twist angle
+  end
+
+  branches
+    t : R.t -> C.t;
+  end
+
+  annotations
+    [R] : Side = left;
+    [C] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    phi.der == w;
+    t == c_W*phi + d_W*w;
+  end
+
+end

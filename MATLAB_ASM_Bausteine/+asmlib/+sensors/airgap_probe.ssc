@@ -1,0 +1,47 @@
+component airgap_probe
+% Air-gap probe
+% Measures the rotating field in the air gap (like a Hall probe), connect in parallel at port LS.
+% The probe draws no current (through variable 0), it only reads psi_h.
+%
+% Equations:
+%   phi_el = angle(psi_h),   Bhat = p*|psi_h| / (2*N1xi1*l*r),   B(gamma,t) = Bhat*cos(gamma - phi_el)
+% Source: Hagl, R.: Elektrische Antriebstechnik. Hanser, Muenchen 2013;
+%         Densborn, lecture notes "DS-Asynchron-Motor", slide 14
+
+  nodes
+    LS = asmlib.airgap; % LS
+  end
+
+  outputs
+    psi_h = {zeros(2, 1), 'Wb'}; % psi_h
+    Bhat = {0, 'T'}; % Bhat
+  end
+
+  parameters
+    p     = {2, '1'};      % number of pole pairs p
+    N1xi1 = {144, '1'};    % effective number of turns N1*xi1
+    l     = {0.15, 'm'};   % effective bar length l
+    r     = {0.06, 'm'};   % radius of the bar centre r
+  end
+
+  equations
+    assert(p >= 1 && N1xi1 > 0 && l > 0 && r > 0, 'p, N1ξ1, l und r müssen positiv sein.');
+  end
+
+  variables
+    psih = {zeros(2, 1), 'Wb'};   % main flux linkage (alpha-beta)
+  end
+
+  annotations
+    [LS] : Side = left;
+    [psi_h, Bhat] : Side = right;
+  end
+
+  equations
+    psih == LS.psi;
+    psi_h == psih;
+    % phi_el = angle(psi_h) is formed by the block in Simulink (atan2 here would create solver events)
+    Bhat == p*sqrt(psih(1)^2 + psih(2)^2)/(2*N1xi1*l*r);
+  end
+
+end

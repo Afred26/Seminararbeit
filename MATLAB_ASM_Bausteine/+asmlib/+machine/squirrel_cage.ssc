@@ -1,0 +1,102 @@
+component squirrel_cage
+% Squirrel-cage rotor
+% Short-circuited cage with stator-referred rotor quantities (R2', L2sigma') in the
+% stator-fixed frame, shaft R and housing C. The rotor feeds its current i2' (alpha-beta)
+% into the air gap.
+%
+% Equations:
+%   0 = R2'*i2' + dpsi2'/dt - j*p*Om*psi2',   psi2' = L2sigma'*i2' + psi_h
+%   M = 3/2*p*Im{psi_h^* i1} = -3/2*p*Im{psi2'^* i2'}   (air-gap torque)
+%   shaft torque at R: M_W = M - k_R*Om - J_M*dOm/dt,   Om = Om_R - Om_C,   dth/dt = Om
+%   s = 1 - p*Om/(2*pi*f_N);  theta2 = phi_el - p*th is formed by the block in Simulink (see below)
+% Initial state: currentless, speed n0.
+%
+% Numerics: the rotor voltage equation is solved internally in the rotor-fixed frame,
+%   0 = R2'*i2r + dpsi2r/dt,   psi2' = e^(j*p*th)*psi2r,   i2' = e^(j*p*th)*i2r,
+% which is mathematically identical to the stator-fixed form above. The states then only
+% oscillate at the slip frequency s*f1 instead of f1, so the integration error of the solver
+% does not distort the slip frequency at small slip (with ode23t, h = 0.1 ms otherwise
+% about 0.4 % torque error at s = 0.02).
+% Source: Hagl, R.: Elektrische Antriebstechnik. Hanser, Muenchen 2013
+
+  nodes
+    LS = asmlib.airgap; % LS
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  outputs
+    i2b = {zeros(2, 1), 'A'}; % i2b
+    M = {0, 'N*m'}; % M
+    Om = {0, 'rad/s'}; % Om
+    th_mech = {0, 'rad'}; % th_mech
+    s = {0, '1'}; % s
+    psi_h = {zeros(2, 1), 'Wb'}; % psi_h (for theta2)
+  end
+
+  parameters
+    R2b  = {1.225, 'Ohm'};        % rotor resistance R2' (stator-referred)
+    L2sb = {9.902e-3, 'H'};       % rotor leakage inductance L2sigma' (stator-referred)
+    p    = {2, '1'};              % number of pole pairs p
+    f_N  = {50, 'Hz'};            % rated frequency f_N (for the slip)
+    J_M  = {0.012, 'kg*m^2'};     % motor inertia J_M
+    k_R  = {0, 'N*m*s/rad'};      % friction coefficient k_R
+    n0   = {0, 'rpm'};            % initial speed n0
+  end
+
+  equations
+    assert(R2b > 0, 'Rotorwiderstand R2′ muss > 0 sein.');
+    assert(L2sb > 0, 'Rotorstreuinduktivität L2σ′ muss > 0 sein.');
+    assert(p >= 1, 'Polpaarzahl p muss >= 1 sein.');
+    assert(J_M > 0, 'Trägheitsmoment J_M muss > 0 sein (die Rotordrehzahl ist Zustandsgröße).');
+    assert(k_R >= 0, 'Reibbeiwert k_R darf nicht negativ sein.');
+  end
+
+  variables
+    i2   = {zeros(2, 1), 'A'};                                     % rotor current i2' (alpha-beta)
+    psih = {zeros(2, 1), 'Wb'};                                    % main flux linkage (alpha-beta)
+    psi2 = {zeros(2, 1), 'Wb'};                                    % rotor flux linkage psi2' (stator-fixed)
+    psi2r = {value = {zeros(2, 1), 'Wb'}, priority = priority.high}; % psi2' rotor-fixed (state), currentless
+    th   = {value = {0, 'rad'}, priority = priority.high};         % rotor angle th
+    t    = {0, 'N*m'};                                             % shaft torque at R
+    Mel  = {0, 'N*m'};                                             % air-gap torque
+  end
+
+  variables(ExternalAccess = observe)
+    w    = {value = n0, priority = priority.high};                 % angular velocity Om (initial value n0)
+  end
+
+  branches
+    i2 : * -> LS.i;
+    t : C.t -> R.t;
+  end
+
+  annotations
+    [LS] : Side = left;
+    [R, C, i2b, M, Om, th_mech, s, psi_h] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    th.der == w;
+    psih == LS.psi;
+    psi2 == psih + L2sb*i2;
+    % rotor voltage equation in the rotor-fixed frame (rotation by the electrical rotor angle p*th)
+    let
+      c  = cos(p*th);
+      sn = sin(p*th);
+    in
+      psi2 == [c*psi2r(1) - sn*psi2r(2); sn*psi2r(1) + c*psi2r(2)];
+      {[0; 0], 'V'} == R2b*[c*i2(1) + sn*i2(2); -sn*i2(1) + c*i2(2)] + psi2r.der;
+    end
+    Mel == 3/2*p*(psi2(2)*i2(1) - psi2(1)*i2(2));
+    t == Mel - k_R*w - J_M*w.der;
+    i2b == i2;
+    M == Mel;
+    Om == w;
+    th_mech == th;
+    s == 1 - p*w/(2*pi*f_N);
+    psi_h == psih;   % theta2 = angle(psi_h) - p*th is formed by the block in Simulink (atan2 here would create events)
+  end
+
+end

@@ -1,0 +1,43 @@
+component inertia
+% Inertia
+% Rigid flywheel mass against the fixed reference (e.g. inertia of the driven machine J_L).
+%
+% Equation:  J*dOm/dt = sum M  (sum of the torques acting at R),  Om(0) = 2*pi*n0/60
+% Source: Densborn, lecture notes "DS-Asynchron-Motor", slide 68 (run-up time);
+%         Hagl, R.: Elektrische Antriebstechnik. Hanser, Muenchen 2013
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+  end
+
+  parameters
+    J  = {0.01, 'kg*m^2'};   % moment of inertia J
+    n0 = {0, 'rpm'};         % initial speed n0
+  end
+
+  equations
+    assert(J > 0, 'Trägheitsmoment J muss > 0 sein.');
+  end
+
+  variables
+    t = {0, 'N*m'};          % accelerating torque
+  end
+
+  variables(ExternalAccess = observe)
+    w = {value = n0, priority = priority.high};   % angular velocity Om
+  end
+
+  branches
+    t : R.t -> *;
+  end
+
+  annotations
+    [R] : Side = left;
+  end
+
+  equations
+    w == R.w;
+    t == J*w.der;
+  end
+
+end

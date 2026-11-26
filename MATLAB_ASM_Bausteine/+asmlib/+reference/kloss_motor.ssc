@@ -1,0 +1,53 @@
+component kloss_motor
+% ASM Kloss (quasi-static)
+% Motor torque from the Kloss formula (part B of the prototype): R1 = 0, constant flux, no
+% electrical dynamics, no inertia of its own (flywheel mass external).
+%
+% Equations:  s = (ns - n)/ns,  M = 2*MK*s*sK / (s^2 + sK^2)
+%   M drives R against C (motor operation for 0 < s).
+% Source: Densborn, lecture notes "DS-Asynchron-Motor", slides 47-50;
+%         Hagl, R.: Elektrische Antriebstechnik. Hanser, Muenchen 2013
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  outputs
+    M = {0, 'N*m'}; % M
+    s = {0, '1'}; % s
+  end
+
+  parameters
+    MK = {71.55, 'N*m'};   % breakdown torque MK
+    sK = 0.2;              % breakdown slip sK
+    ns = {1500, 'rpm'};    % synchronous speed ns
+  end
+
+  equations
+    assert(MK > 0 && sK > 0 && sK <= 1 && ns > 0, 'MK, sK, ns müssen positiv sein (sK <= 1).');
+  end
+
+  variables
+    t  = {0, 'N*m'};   % delivered torque
+    w  = {0, 'rad/s'};
+    sl = 0;            % slip
+  end
+
+  branches
+    t : C.t -> R.t;
+  end
+
+  annotations
+    [R, C, M, s] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    sl == (ns - w)/ns;
+    t == 2*MK*sl*sK/(sl^2 + sK^2);
+    M == t;
+    s == sl;
+  end
+
+end

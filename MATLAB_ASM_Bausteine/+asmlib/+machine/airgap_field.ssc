@@ -1,0 +1,61 @@
+component airgap_field
+% Air-gap field
+% Air gap with main inductance Lh. Port LS collects the stator and rotor currents
+% (MMF balance i_mu = i1 + i2') and imposes the main flux linkage psi_h.
+%
+% Equations:
+%   psi_h = Lh*i_mu
+%   phi_el = angle(psi_h)  (position of the flux-density maximum, electrical, stator-fixed)
+%   Bhat = p*|psi_h| / (2*N1xi1*l*r)   (pole flux Phi = 2*Bhat*l*r/p, |psi_h| = N1xi1*Phi)
+%   B(gamma,t) = Bhat*cos(gamma - phi_el)
+% Source: Hagl, R.: Elektrische Antriebstechnik. Hanser, Muenchen 2013;
+%         Densborn, lecture notes "Drehstrom & Drehfeld", slides 59-62
+
+  nodes
+    LS = asmlib.airgap; % LS
+  end
+
+  outputs
+    psi_h = {zeros(2, 1), 'Wb'}; % psi_h
+    Bhat = {0, 'T'}; % Bhat
+    i_mu = {zeros(2, 1), 'A'}; % i_mu
+  end
+
+  parameters
+    Lh    = {0.25, 'H'};   % main inductance Lh
+    p     = {2, '1'};      % number of pole pairs p
+    N1xi1 = {144, '1'};    % effective number of turns N1*xi1
+    l     = {0.15, 'm'};   % effective bar length l
+    r     = {0.06, 'm'};   % radius of the bar centre r
+  end
+
+  equations
+    assert(Lh > 0, 'Hauptinduktivität Lh muss > 0 sein.');
+    assert(p >= 1, 'Polpaarzahl p muss >= 1 sein.');
+    assert(N1xi1 > 0 && l > 0 && r > 0, 'N1ξ1, l und r müssen > 0 sein.');
+  end
+
+  variables
+    imu  = {zeros(2, 1), 'A'};   % magnetising current (alpha-beta)
+    psih = {zeros(2, 1), 'Wb'};  % main flux linkage (alpha-beta)
+  end
+
+  branches
+    imu : LS.i -> *;
+  end
+
+  annotations
+    [LS] : Side = left;
+    [psi_h, Bhat, i_mu] : Side = right;
+  end
+
+  equations
+    psih == LS.psi;
+    psih == Lh*imu;
+    psi_h == psih;
+    % phi_el = angle(psi_h) is formed by the block in Simulink (atan2 here would create solver events)
+    Bhat == p*sqrt(psih(1)^2 + psih(2)^2)/(2*N1xi1*l*r);
+    i_mu == imu;
+  end
+
+end

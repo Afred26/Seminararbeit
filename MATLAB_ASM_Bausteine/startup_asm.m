@@ -1,19 +1,22 @@
 %% startup_asm.m
-% Setzt die MATLAB-Pfade für die ASM-Bausteinbibliothek.
-% Aufruf im Projektordner: startup_asm
+% Sets the MATLAB paths for the ASM block library.
+% Call in the project folder: startup_asm
 %
-% Danach:
-%   build_library            Bibliothek neu bauen (lib/ wird überschrieben)
-%   runtests('tests')        Tests ausführen
-%   asm_bausteine_lib        Bibliothek öffnen (oder Library Browser, Eintrag "ASM-Bausteine")
+% Afterwards:
+%   build_library            rebuild the library (lib/ is overwritten)
+%   build_examples           rebuild the example models (examples/)
+%   R = run_asm(asm_params('kloss'))   simulation without GUI (see run_asm)
+%   T = verify_asm()         technical test cases with report table
+%   runtests('tests')        all unit tests
+%   ASMApp                   graphical user interface
 
-asm_wurzel = fileparts(mfilename('fullpath'));
-addpath(asm_wurzel, ...                                  % Pakete +asmlib, +asmexport, +asmbib
-        fullfile(asm_wurzel, 'lib'), ...                 % generierte Bibliotheken
-        fullfile(asm_wurzel, 'parameter'), ...           % Parametersätze
-        fullfile(asm_wurzel, 'beispiele'));              % Beispielmodelle
-fprintf('ASM-Bausteine: Pfade gesetzt (%s)\n', asm_wurzel);
-if ~exist(fullfile(asm_wurzel, 'lib', 'asm_bausteine_lib.slx'), 'file')
+asm_root = fileparts(mfilename('fullpath'));
+addpath(asm_root, ...                                  % packages +asmlib, +asmtools, +asmexport, +asmapp
+        fullfile(asm_root, 'lib'), ...                 % generated libraries
+        fullfile(asm_root, 'parameter'), ...           % parameter sets
+        fullfile(asm_root, 'examples'));               % example models
+fprintf('ASM-Bausteine: Pfade gesetzt (%s)\n', asm_root);
+if ~exist(fullfile(asm_root, 'lib', 'asm_blocks_lib.slx'), 'file')
     fprintf('  Bibliothek fehlt noch - build_library ausführen.\n');
 end
-clear asm_wurzel
+clear asm_root

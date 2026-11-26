@@ -1,0 +1,53 @@
+component current_sensor3
+% Three-phase current sensor
+% Three-phase current measurement (internal resistance 0), connect in series into the three lines.
+% Positive current flows from the input (a_in ...) to the output (a_out ...).
+%
+% Equations:
+%   i1 = 2/3*(i_a + a*i_b + a^2*i_c)   (space vector, alpha-beta),  a = e^(j*2*pi/3)
+%   i2 = (i_a^2 + i_b^2 + i_c^2)/3;  from this the block forms in Simulink
+%   I_eff = sqrt( f_meas*int_{t-T}^{t} i2 dt ),  T = 1/f_meas  (quadratic mean of the lines)
+% Source: Densborn, lecture notes "Drehstrom & Drehfeld"; Hagl, R.: Elektrische Antriebstechnik. Hanser 2013
+
+  nodes
+    a_in = foundation.electrical.electrical; % a in
+    b_in = foundation.electrical.electrical; % b in
+    c_in = foundation.electrical.electrical; % c in
+    a_out = foundation.electrical.electrical; % a out
+    b_out = foundation.electrical.electrical; % b out
+    c_out = foundation.electrical.electrical; % c out
+  end
+
+  outputs
+    i_abc = {zeros(3, 1), 'A'}; % i_abc
+    i1 = {zeros(2, 1), 'A'}; % i1
+    i2 = {0, 'A^2'}; % i^2
+  end
+
+  variables
+    ia = {0, 'A'};
+    ib = {0, 'A'};
+    ic = {0, 'A'};
+  end
+
+  branches
+    ia : a_in.i -> a_out.i;
+    ib : b_in.i -> b_out.i;
+    ic : c_in.i -> c_out.i;
+  end
+
+  annotations
+    [a_in, b_in, c_in] : Side = left;
+    [a_out, b_out, c_out, i_abc, i1, i2] : Side = right;
+  end
+
+  equations
+    a_in.v == a_out.v;
+    b_in.v == b_out.v;
+    c_in.v == c_out.v;
+    i_abc == [ia; ib; ic];
+    i1 == [2/3*(ia - ib/2 - ic/2); (ib - ic)/sqrt(3)];
+    i2 == (ia^2 + ib^2 + ic^2)/3;
+  end
+
+end

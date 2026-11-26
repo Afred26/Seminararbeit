@@ -1,0 +1,53 @@
+component load_table
+% Load from table
+% Load torque from a table M_L(n) (linear interpolation, held constant outside the range),
+% always acts against the relative rotation of R against C.
+%
+% Equation:  M_L = interp(n_tab, M_tab, |n|)*sgn(n),  sgn smoothed with tanh(Om/0.1 rad/s)
+% Source: Densborn, lecture notes "DS-Asynchron-Motor", slides 47-56
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  parameters
+    n_tab = {[0 1500], 'rpm'};     % speed breakpoints n
+    M_tab = {[0 26.5], 'N*m'};     % load torque breakpoints M_L
+  end
+
+  parameters(ExternalAccess = none)
+    w_eps = {0.1, 'rad/s'};        % smoothing of the sign function
+  end
+
+  equations
+    assert(length(n_tab) >= 2 && length(n_tab) == length(M_tab), ...
+           'n_tab und M_tab brauchen gleich viele Stützstellen (mindestens 2).');
+    assert(all(diff(n_tab) > 0), 'n_tab muss streng monoton steigen.');
+    assert(all(M_tab >= 0), 'M_tab darf nicht negativ sein.');
+  end
+
+  variables
+    t = {0, 'N*m'};   % load torque (absorbed)
+    w = {0, 'rad/s'}; % relative speed
+  end
+
+  branches
+    t : R.t -> C.t;
+  end
+
+  annotations
+    [R] : Side = left;
+    [C] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    let
+      wa = w*tanh(w/w_eps);   % smooth |Om|, exact for |Om| >> Om_eps
+    in
+      t == tablelookup(n_tab, M_tab, wa, interpolation = linear, extrapolation = nearest)*tanh(w/w_eps);
+    end
+  end
+
+end

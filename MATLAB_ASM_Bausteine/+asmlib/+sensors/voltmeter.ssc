@@ -1,0 +1,28 @@
+component voltmeter
+% Voltmeter
+% Ideal voltage sensor (infinite internal resistance), connect in parallel. u = v_p - v_n.
+% The component delivers instantaneous values; the block forms the RMS value in Simulink:
+%   U_eff = sqrt( f_meas*int_{t-T}^{t} u^2 dt ),  T = 1/f_meas  (moving window)
+% Source: Hagl, R.: Elektrische Antriebstechnik. Hanser, Muenchen 2013
+
+  nodes
+    p = foundation.electrical.electrical; % p
+    n = foundation.electrical.electrical; % n
+  end
+
+  outputs
+    u = {0, 'V'}; % u
+    u2 = {0, 'V^2'}; % u^2
+  end
+
+  annotations
+    [p] : Side = left;
+    [n, u, u2] : Side = right;
+  end
+
+  equations
+    u == p.v - n.v;
+    u2 == (p.v - n.v)^2;
+  end
+
+end

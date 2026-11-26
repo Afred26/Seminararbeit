@@ -1,0 +1,19 @@
+domain airgap
+% Air gap (space vector, stator-fixed)
+% Interface between stator, air-gap field and squirrel-cage rotor.
+%   Across variable: main flux linkage psi = [psi_alpha; psi_beta] in Wb
+%   Through variable: current i = [i_alpha; i_beta] in A flowing into the air gap
+% The node rule (sum of currents = 0) is the MMF balance
+%   i1 + i2' - i_mu = 0,  psi_h = Lh*i_mu.
+% Rationale and alternatives: doku/SPEC.md, section 7.
+% Source: Hagl, R.: Elektrische Antriebstechnik. Hanser, Muenchen 2013.
+
+  variables
+    psi = {zeros(2, 1), 'Wb'};   % main flux linkage psi_h (alpha, beta)
+  end
+
+  variables(Balancing = true)
+    i = {zeros(2, 1), 'A'};      % current (alpha, beta)
+  end
+
+end

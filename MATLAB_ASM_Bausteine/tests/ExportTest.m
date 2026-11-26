@@ -1,17 +1,17 @@
 classdef ExportTest < matlab.unittest.TestCase
-%EXPORTTEST Prüft das Export-Gerüst +asmexport (Folienbilder und Modellbilder).
-%   Ausführen im Projektordner:  startup_asm; runtests('tests')
-%   Alle Dateien entstehen in einem temporären Ordner, export/ bleibt unberührt.
+%EXPORTTEST Checks the export package +asmexport (slide figures and model figures).
+%   Run in the project folder:  startup_asm; runtests('tests')
+%   All files are created in a temporary folder, export/ stays untouched.
 
     properties
-        Ordner
+        Folder
         Fig
     end
 
     methods (TestMethodSetup)
-        function vorbereiten(tc)
+        function prepare(tc)
             f = tc.applyFixture(matlab.unittest.fixtures.TemporaryFolderFixture);
-            tc.Ordner = f.Folder;
+            tc.Folder = f.Folder;
             tc.Fig = figure('Visible', 'off');
             tc.addTeardown(@() close(tc.Fig));
             t = linspace(0, 0.04, 400);
@@ -23,13 +23,13 @@ classdef ExportTest < matlab.unittest.TestCase
             plot(ax, t, -0.5*sin(2*pi*50*t), 'DisplayName', 'i Stab 2');
             legend(ax); xlabel(ax, 't in s'); ylabel(ax, 'u / û'); title(ax, 'Testbild');
             text(ax, 0.01, 0.8, 'kleiner Text', 'FontSize', 8);
-            ax.FontSize = 9;                                % absichtlich zu klein
+            ax.FontSize = 9;                                % deliberately too small
         end
     end
 
     methods (Test)
-        function folienbildErzeugtPngUndSvg(tc)
-            d = asmexport.folienbild(tc.Fig, 'testbild', 'Ordner', tc.Ordner);
+        function slideFigureCreatesPngAndSvg(tc)
+            d = asmexport.slide_figure(tc.Fig, 'testbild', 'Folder', tc.Folder);
             tc.verifyEqual(numel(d), 2);
             for k = 1:numel(d)
                 info = dir(d{k});
@@ -39,43 +39,43 @@ classdef ExportTest < matlab.unittest.TestCase
             tc.verifyTrue(endsWith(d{1}, '.png') && endsWith(d{2}, '.svg'));
         end
 
-        function folienbildFormat16zu9mit300dpi(tc)
-            d = asmexport.folienbild(tc.Fig, 'format', 'Ordner', tc.Ordner, 'Formate', "png");
+        function slideFigureFormat16to9at300dpi(tc)
+            d = asmexport.slide_figure(tc.Fig, 'format', 'Folder', tc.Folder, 'Formats', "png");
             info = imfinfo(d{1});
-            S = asmexport.stil();
+            S = asmexport.style();
             tc.verifyEqual(info.Width / info.Height, 16/9, 'RelTol', 0.01, 'Seitenverhältnis nicht 16:9');
-            tc.verifyEqual(info.Width, round(S.breite_in*S.dpi), 'RelTol', 0.01, 'Auflösung nicht 300 dpi');
+            tc.verifyEqual(info.Width, round(S.width_in*S.dpi), 'RelTol', 0.01, 'Auflösung nicht 300 dpi');
         end
 
-        function folienbildStil(tc)
-            asmexport.folienbild(tc.Fig, 'stil', 'Ordner', tc.Ordner, 'Formate', "png");
-            S = asmexport.stil();
+        function slideFigureStyle(tc)
+            asmexport.slide_figure(tc.Fig, 'stil', 'Folder', tc.Folder, 'Formats', "png");
+            S = asmexport.style();
             for o = findall(tc.Fig, '-property', 'FontSize')'
-                tc.verifyGreaterThanOrEqual(o.FontSize, S.schriftgroesse, 'Schrift kleiner als 14 pt');
+                tc.verifyGreaterThanOrEqual(o.FontSize, S.font_size, 'Schrift kleiner als 14 pt');
             end
-            linien = findall(tc.Fig, 'Type', 'line');
-            farbe = @(n) linien(strcmp({linien.DisplayName}, n)).Color;
-            tc.verifyEqual(farbe('u_{L1}'), S.farbe.L1);
-            tc.verifyEqual(farbe('u_{L2}'), S.farbe.L2);
-            tc.verifyEqual(farbe('u_{L3}'), S.farbe.L3);
-            tc.verifyEqual(farbe('i Stab 1'), S.farbe.Stab1);
-            tc.verifyEqual(farbe('i Stab 2'), S.farbe.Stab2);
+            lines_found = findall(tc.Fig, 'Type', 'line');
+            colour = @(n) lines_found(strcmp({lines_found.DisplayName}, n)).Color;
+            tc.verifyEqual(colour('u_{L1}'), S.colour.L1);
+            tc.verifyEqual(colour('u_{L2}'), S.colour.L2);
+            tc.verifyEqual(colour('u_{L3}'), S.colour.L3);
+            tc.verifyEqual(colour('i Stab 1'), S.colour.bar1);
+            tc.verifyEqual(colour('i Stab 2'), S.colour.bar2);
         end
 
-        function ungueltigerDateiname(tc)
-            tc.verifyError(@() asmexport.folienbild(tc.Fig, 'a/b', 'Ordner', tc.Ordner), 'asmexport:name');
-            tc.verifyError(@() asmexport.modellbild('x', 'a b', 'Ordner', tc.Ordner), 'asmexport:name');
+        function invalidFileName(tc)
+            tc.verifyError(@() asmexport.slide_figure(tc.Fig, 'a/b', 'Folder', tc.Folder), 'asmexport:name');
+            tc.verifyError(@() asmexport.model_figure('x', 'a b', 'Folder', tc.Folder), 'asmexport:name');
         end
 
-        function modellbildErzeugtSvgUndPng(tc)
-            m = 'asm_testmodell_export';
+        function modelFigureCreatesSvgAndPng(tc)
+            m = 'asm_test_model_export';
             if bdIsLoaded(m), close_system(m, 0); end
             new_system(m);
             tc.addTeardown(@() close_system(m, 0));
             add_block('simulink/Sources/Constant', [m '/Konstante']);
             add_block('simulink/Sinks/Terminator', [m '/Ende'], 'Position', [200 40 220 60]);
             add_line(m, 'Konstante/1', 'Ende/1');
-            d = asmexport.modellbild(m, 'modell', 'Ordner', tc.Ordner);
+            d = asmexport.model_figure(m, 'modell', 'Folder', tc.Folder);
             tc.verifyEqual(numel(d), 2);
             for k = 1:numel(d)
                 info = dir(d{k});
@@ -84,21 +84,21 @@ classdef ExportTest < matlab.unittest.TestCase
             end
         end
 
-        function modellbildDerBibliothek(tc)
-            tc.assumeEqual(exist('asm_bausteine_lib', 'file'), 4, 'Bibliothek noch nicht gebaut');
-            war = bdIsLoaded('asm_bausteine_lib');
-            d = asmexport.modellbild('asm_bausteine_lib/Maschine', 'maschine', 'Ordner', tc.Ordner);
-            if ~war, close_system('asm_bausteine_lib', 0); end
+        function modelFigureOfLibrary(tc)
+            tc.assumeEqual(exist('asm_blocks_lib', 'file'), 4, 'Bibliothek noch nicht gebaut');
+            was = bdIsLoaded('asm_blocks_lib');
+            d = asmexport.model_figure('asm_blocks_lib/Maschine', 'maschine', 'Folder', tc.Folder);
+            if ~was, close_system('asm_blocks_lib', 0); end
             tc.verifyEqual(numel(d), 2);
             tc.verifyTrue(all(cellfun(@(f) exist(f, 'file') == 2, d)));
         end
 
-        function unbekanntesSystem(tc)
-            tc.verifyError(@() asmexport.modellbild('asm_gibt_es_nicht', 'x', 'Ordner', tc.Ordner), ?MException);
+        function unknownSystem(tc)
+            tc.verifyError(@() asmexport.model_figure('asm_does_not_exist', 'x', 'Folder', tc.Folder), ?MException);
         end
 
-        function zielordnerStandard(tc)
-            z = asmexport.zielordner();
+        function defaultOutputFolder(tc)
+            z = asmexport.output_folder();
             tc.verifyTrue(endsWith(z, [filesep 'export']));
             tc.verifyEqual(exist(z, 'dir'), 7);
         end

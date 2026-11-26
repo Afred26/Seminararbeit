@@ -1,0 +1,53 @@
+component voltage_sensor3
+% Three-phase voltage sensor
+% Three-phase voltage measurement (infinite internal resistance), connect in parallel.
+% Phase voltages either against the artificial star point (mean of a, b, c) or against
+% terminal n (then n must be connected).
+%
+% Equations:
+%   u_phase = [v_a - v_m; v_b - v_m; v_c - v_m],  v_m = (v_a + v_b + v_c)/3 or v_m = v_n
+%   u_line  = [v_a - v_b; v_b - v_c; v_c - v_a]
+%   u2 = (u_ab^2 + u_bc^2 + u_ca^2)/3;  from this the block forms in Simulink
+%   U_eff = sqrt( f_meas*int_{t-T}^{t} u2 dt )  (RMS line voltage; symmetric U = sqrt(3)*U_phase)
+% Source: Densborn, lecture notes "Drehstrom & Drehfeld", slides 11-16
+
+  nodes
+    a = foundation.electrical.electrical; % a
+    b = foundation.electrical.electrical; % b
+    c = foundation.electrical.electrical; % c
+    n = foundation.electrical.electrical; % n
+  end
+
+  outputs
+    u_phase = {zeros(3, 1), 'V'}; % u_phase
+    u_line = {zeros(3, 1), 'V'}; % u_line
+    u2 = {0, 'V^2'}; % u^2
+  end
+
+  parameters
+    reference = 1;   % reference of the phase voltages: 1 = artificial star point, 2 = terminal n
+  end
+
+  equations
+    assert(reference == 1 || reference == 2, 'Bezug muss 1 oder 2 sein.');
+  end
+
+  annotations
+    [a, b, c, n] : Side = left;
+    [u_phase, u_line, u2] : Side = right;
+  end
+
+  equations
+    let
+      vm  = if reference == 1, (a.v + b.v + c.v)/3 else n.v end;
+      uab = a.v - b.v;
+      ubc = b.v - c.v;
+      uca = c.v - a.v;
+    in
+      u_phase == [a.v - vm; b.v - vm; c.v - vm];
+      u_line == [uab; ubc; uca];
+      u2 == (uab^2 + ubc^2 + uca^2)/3;
+    end
+  end
+
+end

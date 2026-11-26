@@ -1,0 +1,45 @@
+component friction
+% Friction
+% Viscous and dry (Coulomb) friction between R and C (bearings, motor fan).
+%
+% Equation:  M_R = k_R*Om + M_C*sgn(Om),  sgn smoothed with tanh(Om/0.1 rad/s)
+% Source: Hagl, R.: Elektrische Antriebstechnik. Hanser, Muenchen 2013
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  parameters
+    k_R = {1e-3, 'N*m*s/rad'};   % viscous friction coefficient k_R
+    M_C = {0, 'N*m'};            % Coulomb friction torque M_C
+  end
+
+  parameters(ExternalAccess = none)
+    w_eps = {0.1, 'rad/s'};      % smoothing of the sign function
+  end
+
+  equations
+    assert(k_R >= 0 && M_C >= 0, 'k_R und M_C dürfen nicht negativ sein.');
+  end
+
+  variables
+    t = {0, 'N*m'};   % friction torque (absorbed)
+    w = {0, 'rad/s'}; % relative speed
+  end
+
+  branches
+    t : R.t -> C.t;
+  end
+
+  annotations
+    [R] : Side = left;
+    [C] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    t == k_R*w + M_C*tanh(w/w_eps);
+  end
+
+end

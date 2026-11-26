@@ -1,100 +1,107 @@
 classdef AppTest < matlab.unittest.TestCase
-%APPTEST Rechenkern asmapp.simuliere und Bedienoberfläche ASMApp.
-%   Ausführen im Projektordner:  startup_asm; runtests('tests')
+%APPTEST Computational core run_asm (scenarios lab and slides) and the GUI ASMApp.
+%   Run in the project folder:  startup_asm; runtests('tests')
 %
-%   Laboraufbau: Standardwerte gegen das unveränderte Beispielmodell bsp_hochlauf_laststoss
-%   (Toleranz wie ValidierungTest V2: 1 % von ns bzw. MK) und gegen BeispieleTest (n_end);
-%   Parameterübergabe (Benutzerdefiniert, konstante Last) gegen asmbib.pruefstand.
-%   Folien: Standardwerte gegen bsp_folien16_30_rotorstab und die Folienzustände (DidaktikTest).
-%   Dazu Eingabeprüfung und ein Rauchtest der Oberfläche.
+%   Lab: default values against the unchanged example model ex_startup_load_step
+%   (tolerance as BenchmarkTest V2: 1 % of ns or MK) and against ExamplesTest (n_end);
+%   parameter passing (custom, constant load) against asmtools.test_bench.
+%   Slides: default values against ex_slides16_30_rotor_bars and the slide states (DidacticsTest).
+%   Plus input check and a smoke test of the GUI.
 
     properties
-        P           % Parametersatz asm_standard
-        E_labor     % asmapp.simuliere('labor') mit Standardwerten
-        E_folien    % asmapp.simuliere('folien') mit Standardwerten
+        P           % parameter set asm_standard
+        R_lab       % run_asm(asm_params('lab'))
+        R_slides    % run_asm(asm_params('slides'))
     end
 
     methods (TestClassSetup)
-        function vorbereiten(tc)
-            if ~exist('asm_bausteine_lib', 'file'), build_library(); end
-            war = bdIsLoaded('asm_bausteine_lib');
-            load_system('asm_bausteine_lib');
-            if ~war, tc.addTeardown(@() close_system('asm_bausteine_lib', 0)); end
+        function prepare(tc)
+            if ~exist('asm_blocks_lib', 'file'), build_library(); end
+            was = bdIsLoaded('asm_blocks_lib');
+            load_system('asm_blocks_lib');
+            if ~was, tc.addTeardown(@() close_system('asm_blocks_lib', 0)); end
             tc.applyFixture(matlab.unittest.fixtures.SuppressedWarningsFixture( ...
                 {'Simulink:Engine:MdlFileShadowedByFile', 'Simulink:Engine:MdlFileShadowing'}));
-            for m = {'bsp_hochlauf_laststoss', 'bsp_folien16_30_rotorstab'}
+            for m = {'ex_startup_load_step', 'ex_slides16_30_rotor_bars'}
                 if ~bdIsLoaded(m{1}), tc.addTeardown(@() close_system(m{1}, 0)); end
             end
             tc.P = asm_standard();
-            tc.E_labor  = asmapp.simuliere('labor', tc.P);
-            tc.E_folien = asmapp.simuliere('folien');
+            tc.R_lab    = run_asm(asm_params('lab'));
+            tc.R_slides = run_asm(asm_params('slides'));
         end
     end
 
     methods (Test)
-        function laborWieBeispielmodell(tc)
-            % Standardwerte = unverändertes Beispielmodell (nur Messbus protokolliert)
-            m = 'bsp_hochlauf_laststoss';
+        function labLikeExampleModel(tc)
+            % default values = unchanged example model (only the measurement bus is logged)
+            m = 'ex_startup_load_step';
             in = Simulink.SimulationInput(m).setModelParameter('TimeOut', 300);
             ls = Simulink.Simulation.LoggingSpecification;
             addSignalsToLog(ls, Simulink.SimulationData.BlockPath([m '/Motor']), 1);
             in.LoggingSpecification = ls;
             out = sim(in);
-            mess = out.logsout{1}.Values;
-            E = tc.E_labor.zeit;
-            ns = tc.P.ns;  MK = max(asmbib.esb_kennlinie(tc.P, linspace(1e-3, 1, 5000)));
+            meas = out.logsout{1}.Values;
+            Z = tc.R_lab.time;
+            ns = tc.P.ns;  MK = max(asmtools.equivalent_circuit(tc.P, linspace(1e-3, 1, 5000)));
             t = linspace(0, 2, 8001)';
-            dn = max(abs(ip(mess.n, t) - interp1(E.t, E.n, t)));
-            dM = max(abs(ip(mess.M, t) - interp1(E.t, E.M, t)));
+            dn = max(abs(ip(meas.n, t) - interp1(Z.t, Z.n, t)));
+            dM = max(abs(ip(meas.M, t) - interp1(Z.t, Z.M, t)));
             tc.verifyLessThan(dn/ns, 0.01, sprintf('Drehzahl weicht um %.3g 1/min ab', dn));
             tc.verifyLessThan(dM/MK, 0.01, sprintf('Moment weicht um %.3g N·m ab', dM));
-            tc.verifyEqual(E.n(end), 1427.4, 'AbsTol', 1, 'Enddrehzahl wie BeispieleTest');
+            tc.verifyEqual(Z.n(end), 1427.4, 'AbsTol', 1, 'Enddrehzahl wie ExamplesTest');
             tc.verifyEqual(get_param(m, 'Dirty'), 'off', 'Modell darf nicht verändert werden');
         end
 
-        function laborKennzahlen(tc)
-            K = tc.E_labor.kennzahlen;
+        function labMetrics(tc)
+            K = tc.R_lab.metrics;
             tc.verifyEqual(K.ns, 1500);
             tc.verifyEqual(K.s_end, (1500 - K.n_end)/1500, 'AbsTol', 1e-12);
-            tc.verifyEqual(K.M_K, 2.7*tc.P.M_N, 'RelTol', 1e-3, 'Kippmoment = MK des Beispielmotors');
-            tc.verifyEqual(K.s_K, 0.2, 'AbsTol', 1e-3, 'Kippschlupf sK');
-            tc.verifyEqual(K.M_A, asmbib.esb_kennlinie(tc.P, 1), 'RelTol', 1e-12, 'Anzugsmoment (ESB)');
-            % Endzustand: Motormoment = Lastmoment (Lüfter + Laststoß), stationär
+            tc.verifyEqual(K.M_K, tc.P.MK, 'RelTol', 1e-3, 'Kippmoment = MK des Beispielmotors');
+            tc.verifyEqual(K.s_K, tc.P.sK, 'AbsTol', 1e-3, 'Kippschlupf sK');
+            tc.verifyEqual(K.M_A, asmtools.equivalent_circuit(tc.P, 1), 'RelTol', 1e-12, 'Anzugsmoment (ESB)');
+            % final state: motor torque = load torque (fan + load step), stationary
             ML = tc.P.M_N*(K.n_end/1440)^2 + 0.3*tc.P.M_N;
             tc.verifyEqual(K.M_end, ML, 'RelTol', 0.01, 'Gleichgewicht M = M_L am Ende');
-            % Strangströme aus dem Raumzeiger: Summe null (Stern ohne N)
-            tc.verifyLessThan(max(abs(sum(tc.E_labor.zeit.i_abc, 2))), 1e-9);
+            % phase currents from the space vector: sum zero (star without N)
+            tc.verifyLessThan(max(abs(sum(tc.R_lab.time.i_abc, 2))), 1e-9);
+            % fixed run-up target 0.9*n_N, load step evaluated separately
+            tc.verifyEqual(K.startup.n_target, 0.9*tc.P.n_N);
+            tc.verifyTrue(K.startup.reached);
+            tc.verifyTrue(K.load_step.settled_before && K.load_step.settled);
+            tc.verifyGreaterThan(K.load_step.dn_dip, K.load_step.dn_static, ...
+                'dynamisches Modell: Unterschwingen nach dem Laststoß');
         end
 
-        function laborBenutzerdefiniertWiePruefstand(tc)
-            % Parameterübergabe: geänderter Motor und Netz gegen den unabhängig gebauten Prüfstand
-            P = asmapp.standardwerte('labor');
-            P.parametersatz = 'Benutzerdefiniert';
+        function labCustomLikeTestBench(tc)
+            % parameter passing: changed motor and grid against the independently built test bench
+            P = asm_params('lab');
+            P.param_set = 'custom';
             P.R2b = 1.8;  P.J_M = 0.02;  P.t_end = 1.5;  P.U_L = 380;  P.J_L = 0.015;
-            E = asmapp.simuliere('labor', P);
+            R = run_asm(P);
             Pm = tc.P;  Pm.R2b = 1.8;  Pm.J_M = 0.02;
-            R = asmbib.pruefstand('P', Pm, 'U', 380, 'J_L', 0.015, 'dM_L', 0.3*tc.P.M_N, 't_stoss', 1, 't_end', 1.5);
+            B = asmtools.test_bench('P', Pm, 'U', 380, 'J_L', 0.015, 'dM_L', 0.3*tc.P.M_N, 't_step', 1, 't_end', 1.5);
             t = linspace(0, 1.5, 6001)';
-            dn = max(abs(interp1(R.n(:,1), R.n(:,2), t) - interp1(E.zeit.t, E.zeit.n, t)));
+            dn = max(abs(interp1(B.n(:,1), B.n(:,2), t) - interp1(R.time.t, R.time.n, t)));
             tc.verifyLessThan(dn/tc.P.ns, 0.01, sprintf('Benutzerdefiniert: Abweichung %.3g 1/min', dn));
-            tc.verifyLessThan(E.kennzahlen.n_end, tc.E_labor.kennzahlen.n_end - 10, 'größeres R2′ -> mehr Schlupf');
+            tc.verifyLessThan(R.metrics.n_end, tc.R_lab.metrics.n_end - 10, 'größeres R2′ -> mehr Schlupf');
         end
 
-        function laborKonstanteLast(tc)
-            % Lasttyp konstant (Baustein Last konstant) gegen Prüfstand; V3: Bemessungspunkt n_N
-            P = asmapp.standardwerte('labor');
-            P.last_typ = 'konstant';  P.M_L = tc.P.M_N;  P.dM_L = 0;  P.t_end = 1.5;
-            E = asmapp.simuliere('labor', P);
-            R = asmbib.pruefstand('Last', 'konstant', 'M_L0', tc.P.M_N, 't_end', 1.5);
+        function labConstantLoad(tc)
+            % load type constant (block Last konstant) against the test bench; V3: rated point n_N
+            P = asm_params('lab');
+            P.load_type = 'constant';  P.M_L = tc.P.M_N;  P.dM_L = 0;  P.t_end = 1.5;
+            R = run_asm(P);
+            B = asmtools.test_bench('Load', 'constant', 'M_L0', tc.P.M_N, 't_end', 1.5);
             t = linspace(0, 1.5, 6001)';
-            dn = max(abs(interp1(R.n(:,1), R.n(:,2), t) - interp1(E.zeit.t, E.zeit.n, t)));
+            dn = max(abs(interp1(B.n(:,1), B.n(:,2), t) - interp1(R.time.t, R.time.n, t)));
             tc.verifyLessThan(dn/tc.P.ns, 0.01, sprintf('konstante Last: Abweichung %.3g 1/min', dn));
-            tc.verifyLessThan(abs(E.kennzahlen.n_end - tc.P.n_N)/tc.P.ns, 0.01, 'Bemessungspunkt n_N');
+            tc.verifyLessThan(abs(R.metrics.n_end - tc.P.n_N)/tc.P.ns, 0.01, 'Bemessungspunkt n_N');
+            tc.verifyEmpty(R.metrics.load_step, 'ohne Laststoß keine Laststoß-Kennzahlen');
         end
 
-        function folienWieBeispielmodell(tc)
-            % Daten der Drehfeld-Anzeige und Ausgänge der Rotorstab-Sonde (B⊥, Stabströme, M_S)
-            m = 'bsp_folien16_30_rotorstab';
+        function slidesLikeExampleModel(tc)
+            % data of the field display and outputs of the rotor bar probe (B_perp, bar currents, M_S)
+            m = 'ex_slides16_30_rotor_bars';
             in = Simulink.SimulationInput(m).setModelParameter('TimeOut', 120);
             ls = Simulink.Simulation.LoggingSpecification;
             for port = [2 5 6]                                   % i_k, M_S, B_perp
@@ -102,92 +109,94 @@ classdef AppTest < matlab.unittest.TestCase
             end
             in.LoggingSpecification = ls;
             out = sim(in);
-            D = asmbib.drehfeld_daten(out.get('drehfeld_anzeige'));
-            E = tc.E_folien;
-            L = out.logsout;  sonde = struct();
-            for k = 1:L.numElements, sonde.(sprintf('p%d', L{k}.PortIndex)) = L{k}.Values; end
-            t = E.zeit.t;
-            tc.verifyEqual(E.zeit.B_perp, ip(sonde.p6, t), 'AbsTol', 1e-6*0.8, 'B⊥ wie Rotorstab-Sonde');
-            tc.verifyEqual(E.zeit.i_stab, ip(sonde.p2, t), 'AbsTol', 1e-6*max(abs(E.zeit.i_stab(:))), ...
+            D = asmtools.field_log_data(out.get('field_display_log'));
+            R = tc.R_slides;
+            L = out.logsout;  probe = struct();
+            for k = 1:L.numElements, probe.(sprintf('p%d', L{k}.PortIndex)) = L{k}.Values; end
+            t = R.time.t;
+            tc.verifyEqual(R.time.B_perp, ip(probe.p6, t), 'AbsTol', 1e-6*0.8, 'B⊥ wie Rotorstab-Sonde');
+            tc.verifyEqual(R.time.i_bar, ip(probe.p2, t), 'AbsTol', 1e-6*max(abs(R.time.i_bar(:))), ...
                 'Stabströme wie Rotorstab-Sonde');
-            tc.verifyEqual(E.zeit.M_S, ip(sonde.p5, t), 'AbsTol', 1e-6*max(abs(E.zeit.M_S)), 'M_S wie Sonde');
-            tc.verifyEqual(E.zeit.B_perp(1), 0.8, 'RelTol', 1e-6, 'Folie 18: B⊥ maximal');
-            tc.verifyEqual(E.daten.t, D.t, 'AbsTol', 1e-12);
-            tc.verifyEqual(E.daten.psi_h, D.psi_h, 'AbsTol', 1e-9*max(abs(D.psi_h(:))));
-            tc.verifyEqual(E.daten.i2b, D.i2b, 'AbsTol', 1e-9*max(abs(D.i2b(:))));
-            tc.verifyEqual(max(hypot(E.daten.psi_h(:,1), E.daten.psi_h(:,2))), 2*144*0.8*0.15*0.06, ...
+            tc.verifyEqual(R.time.M_S, ip(probe.p5, t), 'AbsTol', 1e-6*max(abs(R.time.M_S)), 'M_S wie Sonde');
+            tc.verifyEqual(R.time.B_perp(1), 0.8, 'RelTol', 1e-6, 'Folie 18: B⊥ maximal');
+            tc.verifyEqual(R.field_data.t, D.t, 'AbsTol', 1e-12);
+            tc.verifyEqual(R.field_data.psi_h, D.psi_h, 'AbsTol', 1e-9*max(abs(D.psi_h(:))));
+            tc.verifyEqual(R.field_data.i2b, D.i2b, 'AbsTol', 1e-9*max(abs(D.i2b(:))));
+            tc.verifyEqual(max(hypot(R.field_data.psi_h(:,1), R.field_data.psi_h(:,2))), 2*144*0.8*0.15*0.06, ...
                 'RelTol', 1e-9, '|ψh| aus B̂ = 0,8 T (p = 1)');
         end
 
-        function folienZustaende(tc)
-            % Folien 18/21/27 (wie DidaktikTest): Strom null, maximal aus der Ebene, umgekehrt
-            Z = tc.E_folien.zeit;
-            w = @(t) interp1(Z.t, Z.i_stab, t);
-            ih = tc.E_folien.kennzahlen.ihat_stab;
+        function slideStates(tc)
+            % slides 18/21/27 (as DidacticsTest): no current, maximum out of the plane, reversed
+            Z = tc.R_slides.time;
+            w = @(t) interp1(Z.t, Z.i_bar, t);
+            ih = tc.R_slides.metrics.ihat_bar;
             tc.verifyEqual(w(0), [0 0], 'AbsTol', 1e-6*ih, 'Folie 18: kein Strom');
             tc.verifyEqual(w(0.005), [ih -ih], 'RelTol', 1e-3, 'Folie 21: Stab 1 aus der Ebene maximal');
             tc.verifyEqual(w(0.015), [-ih ih], 'RelTol', 1e-3, 'Folie 27: Stromrichtung umgekehrt');
             tc.verifyGreaterThan(min(Z.F, [], 'all'), -1e-6*ih, 'Kraft stets in Feldrichtung');
-            tc.verifyEqual(tc.E_folien.kennzahlen.M_S_mittel, ih*0.15*0.8*0.06, 'RelTol', 1e-3, ...
+            tc.verifyEqual(tc.R_slides.metrics.M_S_mean, ih*0.15*0.8*0.06, 'RelTol', 1e-3, ...
                 'mittleres Schleifenmoment î·l·B̂·r·sin φ2');
         end
 
-        function folienPhi2AusRotorimpedanz(tc)
-            % φ2 = 90° + φZ mit tan φZ = s·ω1·L2σ/R2 (Schleifenwerte des Prototyps, s = 1)
-            P = asmapp.standardwerte('folien');  P.modus_phi2 = 'Rotorimpedanz';
-            E = asmapp.simuliere('folien', P);
-            phiZ = atand(2*pi*50*5.072e-6/3.187e-4);
-            tc.verifyEqual(E.kennzahlen.phiZ_grad, phiZ, 'AbsTol', 0.05);
+        function slidesPhi2FromRotorImpedance(tc)
+            % phi2 = 90 deg + phiZ with tan(phiZ) = s*w1*L2sigma/R2 (loop values of the prototype, s = 1)
+            P = asm_params('slides');  P.phi2_mode = 'impedance';
+            R = run_asm(P);
+            phiZ = atand(2*pi*50*tc.P.L2s_S/tc.P.R2_S);
+            tc.verifyEqual(R.metrics.phiZ_deg, phiZ, 'AbsTol', 0.05);
         end
 
-        function eingabepruefung(tc)
-            G = asmapp.grenzen();
-            tc.verifyFalse(asmapp.pruefe('R1', -1, G));
-            tc.verifyFalse(asmapp.pruefe('R1', 0, G), 'R1 > 0 (Regel pos)');
-            tc.verifyFalse(asmapp.pruefe('p', 2.5, G), 'p ganzzahlig');
-            tc.verifyFalse(asmapp.pruefe('p', 13, G), 'p ≤ 12');
-            tc.verifyFalse(asmapp.pruefe('J_L', 0, G), 'Zusatzträgheit > 0');
-            tc.verifyFalse(asmapp.pruefe('U_L', NaN, G));
-            tc.verifyTrue(asmapp.pruefe('U_L', 0, G), 'U = 0 erlaubt (min=0)');
-            tc.verifyTrue(asmapp.pruefe('dM_L', -5, G), 'Entlastung erlaubt');
-            P = asmapp.standardwerte();  P.parametersatz = 'Benutzerdefiniert';  P.R1 = -1;
-            tc.verifyError(@() asmapp.simuliere('labor', P), 'asmapp:wert');
-            P = asmapp.standardwerte();  P.last_typ = 'quadratisch';
-            tc.verifyError(@() asmapp.simuliere('labor', P), 'asmapp:wert');
+        function inputCheck(tc)
+            G = asmapp.limits();
+            tc.verifyFalse(asmapp.check_value('R1', -1, G));
+            tc.verifyFalse(asmapp.check_value('R1', 0, G), 'R1 > 0 (Regel pos)');
+            tc.verifyFalse(asmapp.check_value('p', 2.5, G), 'p ganzzahlig');
+            tc.verifyFalse(asmapp.check_value('p', 13, G), 'p ≤ 12');
+            tc.verifyFalse(asmapp.check_value('J_L', 0, G), 'Zusatzträgheit > 0');
+            tc.verifyFalse(asmapp.check_value('U_L', NaN, G));
+            tc.verifyTrue(asmapp.check_value('U_L', 0, G), 'U = 0 erlaubt (min=0)');
+            tc.verifyTrue(asmapp.check_value('dM_L', -5, G), 'Entlastung erlaubt');
+            P = asm_params();  P.param_set = 'custom';  P.R1 = -1;
+            tc.verifyError(@() run_asm(P), 'asm:value');
+            P = asm_params();  P.load_type = 'quadratic';
+            tc.verifyError(@() run_asm(P), 'asm:value');
+            P = asm_params();  P.scenario = 'unknown';
+            tc.verifyError(@() run_asm(P), 'asm:value');
         end
 
-        function appRauchtest(tc)
-            % Oberfläche öffnen, Eingaben prüfen, simulieren, exportieren, schließen
-            app = ASMApp('Sichtbar', false);
+        function appSmokeTest(tc)
+            % open the GUI, check inputs, simulate, export, close
+            app = ASMApp('Visible', false);
             tc.addTeardown(@() delete(app));
-            tc.verifyTrue(isvalid(app.Figur));
-            tc.verifyError(@() app.setze('p', 2.5), 'asmapp:wert', 'p muss ganzzahlig sein');
-            tc.verifyError(@() app.setze('J_L', 0), 'asmapp:wert', 'Zusatzträgheit > 0');
-            app.setze('parametersatz', 'Benutzerdefiniert');
-            app.setze('R2b', 1.5);
-            P = app.parameter();
+            tc.verifyTrue(isvalid(app.Figure));
+            tc.verifyError(@() app.set_input('p', 2.5), 'asm:value', 'p muss ganzzahlig sein');
+            tc.verifyError(@() app.set_input('J_L', 0), 'asm:value', 'Zusatzträgheit > 0');
+            app.set_input('param_set', 'custom');
+            app.set_input('R2b', 1.5);
+            P = app.parameters();
             tc.verifyEqual(P.R2b, 1.5);
-            app.setze('parametersatz', 'Standard');
-            tc.verifyEqual(app.parameter().R2b, asm_standard().R2b, 'Standard setzt die Felder zurück');
-            app.waehle_betriebsart('folien');
-            tc.verifyEqual(app.parameter().t_end, 0.04);
-            app.simulieren();
-            tc.assertNotEmpty(app.Ergebnis, 'Simulation in der Oberfläche fehlgeschlagen');
-            tc.verifyEqual(app.Ergebnis.kennzahlen.ihat_stab, tc.E_folien.kennzahlen.ihat_stab, 'RelTol', 1e-9);
+            app.set_input('param_set', 'standard');
+            tc.verifyEqual(app.parameters().R2b, asm_standard().R2b, 'Standard setzt die Felder zurück');
+            app.select_mode('slides');
+            tc.verifyEqual(app.parameters().t_end, 0.04);
+            app.simulate();
+            tc.assertNotEmpty(app.Result, 'Simulation in der Oberfläche fehlgeschlagen');
+            tc.verifyEqual(app.Result.metrics.ihat_bar, tc.R_slides.metrics.ihat_bar, 'RelTol', 1e-9);
             f = tc.applyFixture(matlab.unittest.fixtures.TemporaryFolderFixture);
-            d = app.exportieren(f.Folder);
+            d = app.export_figure(f.Folder);
             tc.verifyEqual(numel(d), 2, 'PNG und SVG');
             tc.verifyTrue(all(cellfun(@isfile, d)));
-            fig = app.Figur;
-            app.schliessen();
+            fig = app.Figure;
+            app.close_app();
             tc.verifyFalse(isvalid(fig), 'Fenster geschlossen');
         end
 
-        function standardIgnoriertMotorwerte(tc)
-            % Parametersatz "Standard": Motorwerte aus asm_standard.m, mit Warnung
-            P = asmapp.standardwerte();  P.R2b = 2.5;  P.t_end = 0.05;
-            E = tc.verifyWarning(@() asmapp.simuliere('labor', P), 'asmapp:standard');
-            tc.verifyEqual(E.P.R2b, tc.P.R2b);
+        function standardIgnoresMotorValues(tc)
+            % parameter set "standard": motor values from asm_standard.m, with warning
+            P = asm_params();  P.R2b = 2.5;  P.t_end = 0.05;
+            R = tc.verifyWarning(@() run_asm(P), 'asm:standard');
+            tc.verifyEqual(R.params.R2b, tc.P.R2b);
         end
     end
 end

@@ -1,0 +1,49 @@
+component load_step
+% Load step
+% Step change of the load by dM_L at time t_step, acts against the relative rotation.
+%
+% Equation:  M_L = dM_L*sigma(t - t_step)*sgn(Om)
+% The step sigma is smoothed: sigma ~ 1/2*(1 + tanh((t - t_step)/0.5 ms)), rise time ~ 2 ms.
+% An ideal step makes the solver hang at the step (see doku/VALIDIERUNG.md, finding 4).
+% sgn(Om) is smoothed with tanh(Om/0.1 rad/s).
+% Source: Densborn, lecture notes "DS-Asynchron-Motor", slides 53-54
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  parameters
+    t_step = {1, 's'};         % time of the load step t_step
+    dM_L   = {7.95, 'N*m'};    % height of the load step dM_L
+  end
+
+  parameters(ExternalAccess = none)
+    t_r   = {0.5e-3, 's'};     % smoothing of the step
+    w_eps = {0.1, 'rad/s'};    % smoothing of the sign function
+  end
+
+  equations
+    assert(t_step >= 0, 'Zeitpunkt t_stoß darf nicht negativ sein.');
+  end
+
+  variables
+    t = {0, 'N*m'};   % load torque (absorbed)
+    w = {0, 'rad/s'}; % relative speed
+  end
+
+  branches
+    t : R.t -> C.t;
+  end
+
+  annotations
+    [R] : Side = left;
+    [C] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    t == dM_L*0.5*(1 + tanh((time - t_step)/t_r))*tanh(w/w_eps);
+  end
+
+end

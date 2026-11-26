@@ -1,0 +1,47 @@
+component speed_sensor
+% Speed sensor
+% Ideal speed sensor (tachometer), in parallel between shaft R and reference C. Absorbs no torque.
+%
+% Equations:  Om = Om_R - Om_C,  n = 60*Om/(2*pi),  dth/dt = Om (th(0) = 0),  s = (ns - n)/ns
+% Source: Densborn, lecture notes "DS-Asynchron-Motor", slides 45-46
+
+  nodes
+    R = foundation.mechanical.rotational.rotational; % R
+    C = foundation.mechanical.rotational.rotational; % C
+  end
+
+  outputs
+    n = {0, 'rpm'}; % n
+    Om = {0, 'rad/s'}; % Om
+    th = {0, 'rad'}; % th
+    s = {0, '1'}; % s
+  end
+
+  parameters
+    ns = {1500, 'rpm'};   % synchronous speed ns (for the slip)
+  end
+
+  equations
+    assert(ns > 0, 'Synchrondrehzahl ns muss > 0 sein.');
+  end
+
+  variables
+    w  = {0, 'rad/s'};
+    ph = {value = {0, 'rad'}, priority = priority.high};   % rotation angle th
+  end
+
+  annotations
+    [R] : Side = left;
+    [C, n, Om, th, s] : Side = right;
+  end
+
+  equations
+    w == R.w - C.w;
+    ph.der == w;
+    n == w;
+    Om == w;
+    th == ph;
+    s == (ns - w)/ns;
+  end
+
+end

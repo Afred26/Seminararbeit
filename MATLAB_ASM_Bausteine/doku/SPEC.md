@@ -7,6 +7,10 @@ Stand: 13.11.2026 – Status: **Entwurf zur Freigabe**
 > **Alle Zahlenwerte in diesem Dokument sind Beispielwerte (fiktiver 4-kW-Normmotor, 4-polig)
 > oder aus diesen Beispielwerten abgeleitet. Es sind keine Datenblatt- oder Messwerte.**
 
+> **Hinweis (26.11.2026):** Der Code verwendet seit der Überarbeitung englische Bezeichner
+> (Abschnitt 15 mit Zuordnung alt → neu). Die Abschnitte 1–14 dokumentieren den Stand der jeweiligen
+> Phase und nennen Dateien und Funktionen mit den damaligen (deutschen) Namen.
+
 Quellen
 - [D-ASM] Densborn, Skript „DS-Asynchron-Motor“, Stand 14.04.2025 (Folien 13–30 gelesen, Schwerpunkt 16–30)
 - [D-DF] Densborn, Skript „Drehstrom & Drehfeld“, Stand 04.11.2025 (Folien 23–26, 37–66 gelesen)
@@ -664,3 +668,55 @@ modelliert sein, sonst ist das Sternpunktpotenzial unbestimmt.
 - Phase 3 (Vorschlag): Quellen, Mechanik, Messgeräte vollständig; Beispielmodelle Hochlauf, Laststoß.
 - Phase 4 (Vorschlag): Didaktik-Bausteine (Sonde, Drehfeld-Anzeige, Spulenfelder,
   Kennlinienschreiber), `querschnitt_serie`, Abdeckung Folien 16–30 schließen.
+
+## 15 Überarbeitung 26.11.2026: englische Bezeichner, `run_asm`, fachliche Testfälle
+
+- **Code englisch, Ausgaben deutsch** (KONVENTIONEN 6): Dateien, Pakete, Funktionen, Variablen,
+  Felder, Maskenparameter-Namen, Simscape-Komponenten und Kommentare englisch; Bausteinnamen,
+  Prompts, Auswahltexte, Hilfe, Oberfläche, Diagramme, Fehlermeldungen und Testbericht deutsch.
+  Bibliothek und Beispielmodelle werden mit `build_library` und `build_examples` neu erzeugt.
+- **`run_asm(P)`** ersetzt `asmapp.simuliere(betriebsart, P)`: ein Parametersatz `P` aus
+  `asm_params(szenario)` mit Szenario `'lab'`, `'slides'` sowie neu `'kloss'` (Teil B,
+  `ex_kloss_startup`) und `'loop'` (Teil A, `ex_conductor_loop`). Parameter nur über
+  `Simulink.SimulationInput`; Motor immer „Benutzerdefiniert“ mit expliziten Werten.
+- **Kennzahlen** mit festen Definitionen (`asmtools.speed_metrics`, `asmtools.operating_point`):
+  Hochlaufzeit bis 0,9·n_N, Laststoß separat, Einschwingzeit nur bei gehaltenem Toleranzband.
+- **Testfälle** `verify_asm` (Teil A bei s = 0, s_N, s_K, 1; Teil B Hochlauf und Laststoß;
+  Zusatz dynamisches Modell; Info Bemessungspunkt). Ergebnisse: VALIDIERUNG.md Abschnitt 1.
+- **Parametersatz:** MK = 71,55 N·m, sK = 0,2 sowie die abgeleiteten Schleifenwerte U20, R2_S, L2s_S
+  stehen zentral in `asm_standard.m` (vorher als Literale in Katalog, Prüfstand und Tests).
+  R2_S = 3,186 6·10⁻⁴ Ω (vorher gerundet 3,187·10⁻⁴ Ω), L2s_S = 5,071 7 µH. Kein Parameter wurde
+  fachlich geändert; der Bemessungspunkt bleibt eine Eigenschaft des Beispieldatensatzes
+  (`asmtools.rated_point`, VALIDIERUNG 2).
+
+Zuordnung alt → neu (Auswahl; vollständig über `git log --follow`):
+
+| alt | neu |
+|---|---|
+| `+asmbib/` | `+asmtools/` |
+| `asmbib.katalog`, `asmbib.stil`, `asmbib.parametersatz` | `asmtools.catalog`, `asmtools.category_style`, `asmtools.param_set_callback` |
+| `asmbib.pruefstand`, `asmbib.esb_kennlinie`, `asmbib.rotorstab` | `asmtools.test_bench`, `asmtools.equivalent_circuit`, `asmtools.rotor_bars` |
+| `asmbib.querschnitt`, `asmbib.querschnitt_zustand`, `asmbib.drehfeld_animation`, `asmbib.drehfeld_daten` | `asmtools.draw_cross_section`, `asmtools.cross_section_state`, `asmtools.field_animation`, `asmtools.field_log_data` |
+| `asmbib.kennlinie_bild`, `asmbib.spulenfelder_bild`, `asmbib.baue_didaktik` | `asmtools.torque_speed_plot`, `asmtools.coil_fields_plot`, `asmtools.build_didactic_blocks` |
+| `asmbib.IdealesDrehfeld`, `asmbib.SondeRotorstab`, `asmbib.Leiterschleife` | `asmtools.IdealRotatingField`, `asmtools.RotorBarProbe`, `asmtools.ConductorLoop` |
+| `asmexport.folienbild`, `.modellbild`, `.querschnitt_serie`, `.stil`, `.zielordner` | `asmexport.slide_figure`, `.model_figure`, `.cross_section_series`, `.style`, `.output_folder` |
+| `asmapp.simuliere`, `asmapp.standardwerte`, `asmapp.grenzen`, `asmapp.pruefe` | `run_asm`, `asm_params`, `asmapp.limits`, `asmapp.check_value` |
+| `asmlib.luftspalt` (Domäne) | `asmlib.airgap` |
+| `asmlib.maschine.{kaefiglaeufer, klemmbrett, luftspaltfeld, stator}` | `asmlib.machine.{squirrel_cage, terminal_box, airgap_field, stator}` |
+| `asmlib.mechanik.{schwungmasse, welle_elastisch, last_konstant, last_luefter, last_kennlinie, laststoss, reibung}` | `asmlib.mechanics.{inertia, elastic_shaft, load_constant, load_fan, load_table, load_step, friction}` |
+| `asmlib.messgeraete.{amperemeter, voltmeter, strommessung3, spannungsmessung3, leistungsmesser3, drehmomentmesswelle, drehzahlmesser, luftspaltsonde}` | `asmlib.sensors.{ammeter, voltmeter, current_sensor3, voltage_sensor3, power_meter3, torque_sensor, speed_sensor, airgap_probe}` |
+| `asmlib.quellen.netz3`, `asmlib.referenz.asm_kloss` | `asmlib.sources.grid3`, `asmlib.reference.kloss_motor` |
+| `asm_bausteine_lib` | `asm_blocks_lib` |
+| `beispiele/baue_beispiele.m`, `folienbilder.m`, `validierung_motor.m` | `examples/build_examples.m`, `export_slide_figures.m`, `benchmark_motor.m` |
+| `bsp_hochlauf_laststoss`, `bsp_vergleich_modelle`, `bsp_folien16_30_rotorstab`, `bsp_rotorstab_motor` | `ex_startup_load_step`, `ex_model_comparison`, `ex_slides16_30_rotor_bars`, `ex_rotor_bars_motor` |
+| Maskenparameter `parametersatz`, `schaltung`, `phasenfolge`, `t_ein`, `t_stoss`, `f_mess`, `bezug` | `param_set`, `connection`, `phase_seq`, `t_on`, `t_step`, `f_meas`, `reference` |
+| Maskenparameter `lage1`, `darstellung`, `ansicht`, `orientierung`, `zerlegung`, `aenderungsvektor`, `kraftpfeile`, `alle_staebe`, `zeitlupe` | `bar1_angle`, `convention`, `view_frame`, `image_orientation`, `decomposition`, `change_vector`, `force_arrows`, `all_bars`, `slow_motion` |
+| Maskenparameter `kurve_kloss`, `kurve_esb`, `konv_phi2`, `modus_phi2`, `titel` | `show_kloss`, `show_ec`, `conv_phi2`, `phi2_mode`, `title_text` |
+| Protokolle `out.drehfeld_anzeige`, `out.kennlinie` | `out.field_display_log`, `out.torque_speed_log` |
+| Ports `a_ein` … `c_aus`, Ausgänge `u_str`, `u_leiter` | `a_in` … `c_out`, `u_phase`, `u_line` |
+| Tests `ValidierungTest`, `DidaktikTest`, `BibliothekTest`, `BeispieleTest`, `MechanikTest`, `QuellenMessgeraeteTest` | `BenchmarkTest`, `DidacticsTest`, `LibraryTest`, `ExamplesTest`, `MechanicsTest`, `SourcesSensorsTest` (neu: `TechnicalCasesTest`) |
+
+Unverändert: Bausteinnamen in der Bibliothek, Untergruppen („Quellen“, „Maschine“, …), Formelzeichen
+(MK, sK, M_B, n_B, c_W, …), Messbus-Elemente, Blocknamen in den Beispielmodellen, Dateinamen der
+Folienbilder in `export/`.
+

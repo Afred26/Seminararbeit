@@ -1,0 +1,65 @@
+component power_meter3
+% Three-phase power meter
+% Three-phase power meter: current paths in series (input -> output), voltage paths internally
+% against the artificial star point v_m = (v_a + v_b + v_c)/3 (three-wire system).
+%
+% Instantaneous values (u_k = v_k - v_m):
+%   p = u_a*i_a + u_b*i_b + u_c*i_c
+%   q = [(u_b - u_c)*i_a + (u_c - u_a)*i_b + (u_a - u_b)*i_c]/sqrt(3)    (q > 0: inductive)
+%   u2 = sum u_k^2,  i2 = sum i_k^2
+% From these the block forms in Simulink (mean over T = 1/f_meas, moving):
+%   P = <p>, Q = <q>, S = sqrt(<u2>*<i2>)  (symmetric S = 3*U_phase*I = sqrt(3)*U*I), cos phi = P/S
+% For grids with neutral current the measurement is only valid for the three-wire system.
+% Source: Densborn, lecture notes "Drehstrom & Drehfeld", slide 22
+
+  nodes
+    a_in = foundation.electrical.electrical; % a in
+    b_in = foundation.electrical.electrical; % b in
+    c_in = foundation.electrical.electrical; % c in
+    a_out = foundation.electrical.electrical; % a out
+    b_out = foundation.electrical.electrical; % b out
+    c_out = foundation.electrical.electrical; % c out
+  end
+
+  outputs
+    p = {0, 'W'}; % p
+    q = {0, 'V*A'}; % q
+    u2 = {0, 'V^2'}; % sum u^2
+    i2 = {0, 'A^2'}; % sum i^2
+  end
+
+  variables
+    ia = {0, 'A'};
+    ib = {0, 'A'};
+    ic = {0, 'A'};
+  end
+
+  branches
+    ia : a_in.i -> a_out.i;
+    ib : b_in.i -> b_out.i;
+    ic : c_in.i -> c_out.i;
+  end
+
+  annotations
+    [a_in, b_in, c_in] : Side = left;
+    [a_out, b_out, c_out, p, q, u2, i2] : Side = right;
+  end
+
+  equations
+    a_in.v == a_out.v;
+    b_in.v == b_out.v;
+    c_in.v == c_out.v;
+    let
+      vm = (a_in.v + b_in.v + c_in.v)/3;
+      ua = a_in.v - vm;
+      ub = b_in.v - vm;
+      uc = c_in.v - vm;
+    in
+      p == ua*ia + ub*ib + uc*ic;
+      q == ((ub - uc)*ia + (uc - ua)*ib + (ua - ub)*ic)/sqrt(3);
+      u2 == ua^2 + ub^2 + uc^2;
+      i2 == ia^2 + ib^2 + ic^2;
+    end
+  end
+
+end
