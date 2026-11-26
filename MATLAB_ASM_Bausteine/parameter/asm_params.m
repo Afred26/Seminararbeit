@@ -15,7 +15,17 @@ function P = asm_params(scenario)
 %     'loop'    part A: conductor loop of two rotor bars at fixed slip (ex_conductor_loop)
 %     'slides'  slides 16-30: ideal rotating field, rotor at rest (ex_slides16_30_rotor_bars)
 %
-%   Additional fields (units as in the conventions; code identifiers in English)
+%   Input fields and derived fields
+%     Inputs are all fields of asm_standard.m except the derived ones listed below, plus the
+%     scenario fields that follow. Derived fields are ALWAYS recomputed by run_asm from the
+%     inputs actually used (also with param_set = 'custom'); a value given for a derived field
+%     that differs from the recomputed one is ignored with warning 'asm:derived':
+%       ns = 60*f1/p, w1 = 2*pi*f1, N1xi1 (from U_N, f_N, Bhat_N, l, r, p),
+%       U20, R2_S, L2s_S (conductor loop from Bhat_N, l, r, f_N, p, N2, MK, sK),
+%       n_B = n_N*ns/(60*f_N/p) (reference speed of the fan load),
+%       n_target = n_target_rel*n_N, band = band_rel*ns.
+%
+%   Scenario fields (units as in the conventions; code identifiers in English)
 %     scenario       see above
 %     param_set      'standard' | 'custom'   motor values from asm_standard.m or as given
 %     connection     'star' | 'delta'        stator winding (terminal box)
@@ -35,6 +45,8 @@ function P = asm_params(scenario)
 %     s_loop  [-]    slip of the conductor loop (loop)
 %     conv_phi2      +1 | -1                  sign convention of the loop (loop)
 %     loop_periods   number of rotor periods T2 = 1/(s*f1) for the loop (loop)
+%     max_step [s]   maximum solver step (passed as model parameter MaxStep)
+%     rel_tol  [-]   relative solver tolerance (passed as model parameter RelTol)
 %   Evaluation (asmtools.speed_metrics)
 %     n_target_rel   run-up target as fraction of the rated speed n_N (0.9: t at 0.9*n_N)
 %     band_rel       tolerance band for settling as fraction of ns (1e-3: +-1.5 rpm)
@@ -69,6 +81,8 @@ P.n_target_rel = 0.9;
 P.band_rel     = 1e-3;
 P.window       = 0.05;
 P.step_margin  = 5e-3;
+P.max_step     = 1e-4;           % as the example models (conventions, section 4b)
+P.rel_tol      = 1e-5;
 switch scenario
     case {'lab', 'kloss'}
         P.t_end = 2;
@@ -76,6 +90,7 @@ switch scenario
     case 'loop'
         P.t_end = [];             % automatic: loop_periods rotor periods
         P.phi2_mode = 'impedance';
+        P.rel_tol = 1e-6;         % as ex_conductor_loop
     case 'slides'
         P.t_end = 0.04;           % two field revolutions at 50 Hz, rotor at rest
         P.phi2_mode = 'fixed';

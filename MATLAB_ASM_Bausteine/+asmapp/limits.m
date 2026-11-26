@@ -7,8 +7,9 @@ function G = limits()
 %     G.<field>.prompt, .unit, .block, .parameter   origin in the catalogue (prompt/unit German)
 %
 %   The catalogue stays the single source; here only the mapping field -> block/parameter is
-%   defined. Exceptions without mask parameter: t_end (simulation time, rule "pos") and the
-%   slip of the conductor loop s_loop (rule of the ideal field).
+%   defined. Exceptions without mask parameter: t_end (simulation time, rule "pos"), the solver
+%   settings max_step and rel_tol (model parameters) and the slip of the conductor loop s_loop
+%   (rule of the ideal field).
 
 % field | block id | mask parameter
 Z = {
@@ -41,6 +42,8 @@ for k = 1:size(Z, 1)
     G.(Z{k, 1}) = rule(q.rule, q.prompt, q.unit, b.name, q.name);
 end
 G.t_end = rule('pos', 'Simulationsdauer t_End', 's', '', 'StopTime');
+G.max_step = rule('pos;max=0.01', 'maximale Schrittweite', 's', '', 'MaxStep');
+G.rel_tol = rule('pos;max=0.01', 'relative Toleranz', '-', '', 'RelTol');
 end
 
 function g = rule(r, prompt, unit, block, parameter)

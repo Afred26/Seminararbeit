@@ -83,8 +83,14 @@ In Folien und Diagrammen: p (nicht Z_p), ω (nicht ϖ), φ_el nur für den Feldw
   Modellfenster).
 - Beispielmodelle haben keine Modell-Callbacks (PreLoadFcn, InitFcn, …).
 - Kennzahlen mit festen Definitionen (`asmtools.speed_metrics`): Hochlaufzeit bis zu einem festen Ziel
-  (0,9·n_N), Laststoß separat (vorher, Minimum, neuer Arbeitspunkt), Einschwingzeit nur bei
-  eingehaltenem Toleranzband bis zum Ende des Auswertefensters.
+  (0,9·n_N), Laststoß separat (vorher, Minimum bzw. Maximum, neuer Arbeitspunkt), Einschwingzeit nur bei
+  eingehaltenem Toleranzband bis zum Ende des Auswertefensters; ohne gültiges Fenster kein Wert (NaN mit
+  Grund), nie ein scheinbar gültiger Mittelwert. Definitionen und Sonderfälle: ANLEITUNG 1a; unabhängige
+  Unit-Tests: `tests/SpeedMetricsTest.m`.
+- Abgeleitete Größen (ns, N1xi1, Schleifenwerte, n_B, Hochlaufziel, Band) berechnet `run_asm` immer aus
+  den Eingaben; sie werden nicht als Eingabe übernommen.
+- Prüfberichte unterscheiden „bestanden“, „nicht bestanden“, „Fehler“, „abgewählt“, „nicht verfügbar“
+  und „Info“; nur „bestanden“ zählt. Batch-Prüfung: `check_asm` (Exit-Code ≠ 0 bei Nichtbestehen).
 
 ## 4b Numerik
 

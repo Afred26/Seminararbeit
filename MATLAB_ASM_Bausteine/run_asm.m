@@ -25,7 +25,9 @@ function R = run_asm(P, opt)
 %       run_asm neither reads nor writes the base workspace.
 %
 %   Result R
-%     scenario, model, params (values used), solver (Solver, RelTol, MaxStep), duration_s
+%     scenario, model, params (all values used, derived fields recomputed), solver (Solver,
+%     RelTol, MaxStep as passed), sim_input (the Simulink.SimulationInput actually simulated),
+%     duration_s
 %     time          time series (columns, common time grid t):
 %                   lab:    t, n [rpm], Om [rad/s], M [N*m] (air gap), M_W [N*m] (shaft),
 %                           M_L [N*m] (load characteristic), s [-] (with f1), i_abc [A] (phase
@@ -43,9 +45,12 @@ function R = run_asm(P, opt)
 %                     startup      run-up time to n_target = n_target_rel*n_N (fixed target,
 %                                  "nicht erreicht" if not exceeded before the load step)
 %                     before_step  steady speed before the load step (or at the end)
-%                     load_step    n_before, n_min, dn_dip, n_new, dn_static, t_settle, settled
+%                     load_step    n_before, n_min/t_min, n_max/t_max, dn_dip, undershoot,
+%                                  overshoot, n_new, dn_static, t_settle, settled, final_valid
+%                                  (NaN with reason if the final window is too short)
 %                     expected     stable reachable intersection motor/load before and after
-%                                  the step (lab: equivalent circuit, kloss: Kloss formula)
+%                                  the step (lab: equivalent circuit, kloss: Kloss formula);
+%                                  standstill = true: no reachable operating point (no start/stall)
 %                   (definitions: asmtools.speed_metrics, asmtools.operating_point)
 %     notes         cell array with German notes on plausibility (shown in the GUI)
 %
@@ -82,7 +87,8 @@ function [P, notes] = complete_params(Pin)
 % add missing fields, check choices, enforce the standard motor, derived quantities
 if isfield(Pin, 'scenario'), sc = char(Pin.scenario); else, sc = 'lab'; end
 sc = choice(sc, {'lab', 'kloss', 'loop', 'slides'}, 'scenario');
-P = asm_params(sc);
+P0 = asm_params(sc);
+P = P0;
 for f = fieldnames(Pin)'
     if ~strcmp(f{1}, 'info'), P.(f{1}) = Pin.(f{1}); end
 end
@@ -98,8 +104,9 @@ end
 
 notes = {};
 S = asm_standard();
+derived = {'ns', 'w1', 'N1xi1', 'U20', 'R2_S', 'L2s_S', 'n_B', 'n_target', 'band'};
 if strcmp(P.param_set, 'standard')
-    motor = setdiff(fieldnames(S), {'info', 'ns', 'w1', 'N1xi1'}, 'stable')';
+    motor = setdiff(fieldnames(S), [{'info'}, derived], 'stable')';
     differ = motor(cellfun(@(f) ~isequal(P.(f), S.(f)), motor));
     if ~isempty(differ)
         m = sprintf(['Parametersatz "Standard": Motorwerte aus parameter/asm_standard.m verwendet, ' ...
@@ -109,16 +116,39 @@ if strcmp(P.param_set, 'standard')
     end
     for f = motor, P.(f{1}) = S.(f{1}); end
 end
-% derived quantities (units: ns in rpm, w1 in rad/s)
-P.ns    = 60*P.f1/P.p;
-P.w1    = 2*pi*P.f1;
-P.N1xi1 = P.p*(P.U_N/sqrt(3)*sqrt(2)/(2*pi*P.f_N))/(2*P.Bhat_N*P.l*P.r);   % as mask ASM Standard
-P.n_B   = P.n_N/(60*P.f_N/P.p)*P.ns;                 % reference speed of the fan load (= n_N at f_N)
-P.n_target = P.n_target_rel*P.n_N;                  % fixed run-up target (default 0.9*n_N)
-P.band     = P.band_rel*P.ns;                       % tolerance band for settling [rpm]
+% derived quantities, always recomputed from the inputs actually used (units: rpm, rad/s)
+D.ns    = 60*P.f1/P.p;
+D.w1    = 2*pi*P.f1;
+D.N1xi1 = P.p*(P.U_N/sqrt(3)*sqrt(2)/(2*pi*P.f_N))/(2*P.Bhat_N*P.l*P.r);   % as mask ASM Standard
+L = asmtools.loop_parameters(P);                     % conductor loop from MK, sK and geometry
+D.U20   = L.U20;
+D.R2_S  = L.R2_S;
+D.L2s_S = L.L2s_S;
+D.n_B   = P.n_N/(60*P.f_N/P.p)*D.ns;                 % reference speed of the fan load (= n_N at f_N)
+D.n_target = P.n_target_rel*P.n_N;                  % fixed run-up target (default 0.9*n_N)
+D.band     = P.band_rel*D.ns;                       % tolerance band for settling [rpm]
+ignored = {};
+for f = derived
+    v = D.(f{1});
+    given = isfield(Pin, f{1}) && ~isempty(Pin.(f{1}));
+    if given && ~same(Pin.(f{1}), v) && ~(isfield(P0, f{1}) && isequal(Pin.(f{1}), P0.(f{1})))
+        ignored{end+1} = f{1}; %#ok<AGROW>
+    end
+    P.(f{1}) = v;
+end
+if ~isempty(ignored)
+    m = sprintf(['Abgeleitete Größen %s werden aus den Eingaben neu berechnet; die übergebenen Werte ' ...
+                 'wurden ignoriert.'], strjoin(ignored, ', '));
+    warning('asm:derived', '%s', m);
+    notes{end+1} = m;
+end
 if strcmp(P.scenario, 'loop') && isempty(P.t_end)   % loop: whole rotor periods T2 = 1/(s*f1)
     if P.s_loop ~= 0, P.t_end = P.loop_periods/(abs(P.s_loop)*P.f1); else, P.t_end = 0.1; end
 end
+end
+
+function tf = same(a, b)
+tf = isnumeric(a) && isscalar(a) && abs(a - b) <= 1e-12*max(1, abs(b));
 end
 
 function w = choice(w, options, name)
@@ -312,34 +342,43 @@ R.field_par = [];
 R.torque_speed = [];
 R.steady_state = [];
 
-% mean over whole rotor periods (s = 0: over the whole simulation)
+% Mean over whole rotor periods T2 = 1/(|s|*f1), ending at t_end. The loop model is algebraic in
+% theta2 = s*w1*t (no electrical time constant, no transient), so the window may start at t = 0.
+% Without at least one whole period (t_end < T2, or s = 0 without any period) no mean is given.
 if isfinite(T2)
     n_per = floor((t(end) - t(1))/T2 + 1e-9);
-    t0 = t(end) - n_per*T2;
 else
     n_per = 0;
-    t0 = t(1);
 end
 [M_exp, i2hat_exp, phiZ_exp] = asmtools.loop_mean_torque(s, P);
-L = asmtools.loop_parameters(P);
 K.s = s;
 K.T2 = T2;
 K.n_periods = n_per;
-K.window = [t0, t(end)];
-K.M_S_mean = window_mean(t, Z.M_S, t0, t(end));
+if n_per >= 1
+    t0 = t(end) - n_per*T2;
+    K.window = [t0, t(end)];
+    K.M_S_mean = window_mean(t, Z.M_S, t0, t(end));
+else
+    K.window = [NaN, NaN];
+    K.M_S_mean = NaN;
+end
 K.M_S_mean_expected = M_exp;
-K.M_kloss_per_loop = asmtools.kloss_torque(s, P.MK, P.sK)/L.N_S;
+N_S = P.N2/2;                                          % equal loops in the cage
+K.M_kloss_per_loop = asmtools.kloss_torque(s, P.MK, P.sK)/N_S;
 K.i2hat = Z.i2hat(end);
 K.i2hat_expected = i2hat_exp;
 K.phiZ_deg = rad2deg(phiZ_exp);
 K.phi2_deg = rad2deg(Z.phi2(end));
 K.i_max = max(abs(Z.i_k(:)));
 K.M_S_max = max(abs(Z.M_S));
-K.N_S = L.N_S;
+K.N_S = N_S;
 R.metrics = orderfields(K);
 R.notes = {};
-if isfinite(T2) && n_per < 1
-    R.notes{end+1} = sprintf('t_End = %g s ist kürzer als eine Rotorperiode T2 = %g s.', P.t_end, T2);
+if s == 0
+    R.notes{end+1} = 's = 0: keine Rotorperiode, kein Mittelwert; geprüft werden Strom und Moment direkt.';
+elseif n_per < 1
+    R.notes{end+1} = sprintf(['t_End = %g s ist kürzer als eine Rotorperiode T2 = %g s: kein Mittelwert ' ...
+                              'des Schleifenmoments.'], P.t_end, T2);
 end
 end
 
@@ -376,19 +415,21 @@ R.steady_state = [];
 
 s = str2double(get_param(b('Drehfeld'), 's'));
 T2 = 1/(abs(s)*P.f1);                                  % period of the field relative to the rotor
-ib = D.t >= D.t(end) - min(T2, D.t(end) - D.t(1));
 K.ns = 60*P.f1/par.p;
 K.s = s;
 K.ihat_bar = max(abs(C.i_slide(:)));
 K.Bhat = mean(C.Bhat);
 K.phi2_deg = rad2deg(window_mean(D.t, C.phi2, D.t(1), D.t(end)));
 K.phiZ_deg = K.phi2_deg - 90;
-K.M_S_mean = window_mean(D.t(ib), C.M_S(ib), D.t(find(ib, 1)), D.t(end));
-R.metrics = orderfields(K);
 R.notes = {};
-if P.t_end < T2
-    R.notes{end+1} = sprintf('t_End = %g s ist kürzer als eine Feldumdrehung (%g s).', P.t_end, T2);
+if D.t(end) - D.t(1) >= T2*(1 - 1e-9)                  % mean over the last whole field revolution
+    K.M_S_mean = window_mean(D.t, C.M_S, D.t(end) - T2, D.t(end));
+else
+    K.M_S_mean = NaN;
+    R.notes{end+1} = sprintf(['t_End = %g s ist kürzer als eine Feldumdrehung (%g s): kein Mittelwert ' ...
+                              'des Schleifenmoments.'], P.t_end, T2);
 end
+R.metrics = orderfields(K);
 end
 
 %% ========================= evaluation =========================
@@ -396,7 +437,8 @@ function K = speed_evaluation(P, t, n, M_motor, model_name, k_R)
 % run-up and load-step metrics with fixed definitions plus the expected operating points
 if P.dM_L ~= 0 && P.t_step < P.t_end, t_step = P.t_step; else, t_step = NaN; end
 SM = asmtools.speed_metrics(t, n, struct('n_target', P.n_target, 't_step', t_step, ...
-                                         'window', P.window, 'band', P.band, 'margin', P.step_margin));
+                                         'window', P.window, 'band', P.band, 'margin', P.step_margin, ...
+                                         'step_sign', sign(P.dM_L)));
 K.startup = SM.startup;
 K.before_step = SM.before_step;
 K.final = SM.final;
@@ -420,6 +462,14 @@ if ~K.startup.reached
     h{end+1} = sprintf('Hochlaufziel %.0f 1/min (%.0f %% von n_N) vor dem Laststoß nicht erreicht.', ...
                        P.n_target, 100*P.n_target_rel);
 end
+E = K.expected;
+if E.before.standstill
+    h{end+1} = ['Kein erreichbarer stabiler Arbeitspunkt im Motorbereich: das Lastmoment ist im Stillstand ' ...
+                'mindestens so groß wie das Anzugsmoment, der Motor läuft nicht an.'];
+end
+if ~isempty(E.after) && E.after.standstill
+    h{end+1} = 'Nach dem Laststoß kein stabiler Arbeitspunkt im Motorbereich: der Motor kippt und bleibt stehen.';
+end
 if P.dM_L ~= 0 && P.t_step >= P.t_end
     h{end+1} = sprintf('Der Laststoß bei t = %g s liegt nach dem Simulationsende t_End = %g s.', P.t_step, P.t_end);
 end
@@ -427,7 +477,9 @@ if ~isempty(K.load_step)
     if ~K.load_step.settled_before
         h{end+1} = 'Vor dem Laststoß noch nicht eingeschwungen: Drehzahleinbruch nur eingeschränkt aussagekräftig.';
     end
-    if ~K.load_step.settled
+    if ~K.load_step.final_valid
+        h{end+1} = sprintf('Kein neuer stationärer Arbeitspunkt bestimmbar: %s.', K.load_step.reason);
+    elseif ~K.load_step.settled
         h{end+1} = sprintf('Nach dem Laststoß nicht im Toleranzband ±%.2g 1/min eingeschwungen.', K.load_step.band);
     end
 end
@@ -456,7 +508,7 @@ constant = strcmp(P.load_type, 'constant');
 in = in.setBlockParameter(b('Last_konstant'), 'M_L0', z(constant*P.M_L), ...
                           b('Luefter'), 'M_B', z(~constant*P.M_L), b('Luefter'), 'n_B', z(P.n_B), ...
                           b('Laststoss'), 't_step', z(P.t_step), b('Laststoss'), 'dM_L', z(P.dM_L), ...
-                          b('Last_J'), 'J', z(P.J_L));
+                          b('Last_J'), 'J', z(P.J_L), b('Last_J'), 'n0', '0');
 end
 
 function c = connection_option(connection)
@@ -466,6 +518,8 @@ end
 
 %% ========================= helper functions =========================
 function [out, R] = simulate(in, m, P)
+% solver settings explicitly from P (the saved model values are not used)
+in = in.setModelParameter('MaxStep', sprintf('%.17g', P.max_step), 'RelTol', sprintf('%.17g', P.rel_tol));
 t0 = tic;
 out = sim(in);
 R.duration_s = toc(t0);
@@ -477,8 +531,8 @@ if out.tout(end) < P.t_end*(1 - 1e-9)
           R.duration_s, out.tout(end));
 end
 R.model = m;
-R.solver = struct('Solver', get_param(m, 'Solver'), 'RelTol', str2double(get_param(m, 'RelTol')), ...
-                  'MaxStep', str2double(get_param(m, 'MaxStep')));
+R.solver = struct('Solver', get_param(m, 'Solver'), 'RelTol', P.rel_tol, 'MaxStep', P.max_step);
+R.sim_input = in;                                      % exactly what was passed to the model
 end
 
 function x = logged(out, block_path, port)

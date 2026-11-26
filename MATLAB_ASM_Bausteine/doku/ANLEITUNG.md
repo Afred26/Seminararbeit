@@ -9,8 +9,9 @@ Netz → Messgeräte → Motor → Welle → Last.
 
 ## 1 Schnellstart
 
-Voraussetzungen: MATLAB, Simulink, Simscape, Simscape Electrical. Getestet ist nur **R2026b**
-(Abschnitt 9). Ein C-Compiler wird nicht gebraucht.
+Voraussetzungen: MATLAB, Simulink, Simscape und Simscape Electrical (Simscape Electrical braucht
+`build_library` für den Baustein „ASM Referenz“ und `BenchmarkTest` V2). Getestet ist nur
+**R2026b Update 1** (Abschnitt 9). Ein C-Compiler wird nicht gebraucht.
 
 ```matlab
 cd <Projektordner>/MATLAB_ASM_Bausteine
@@ -18,6 +19,7 @@ startup_asm          % Pfade setzen
 build_library        % Bibliothek erzeugen (lib/, etwa 5 s)
 build_examples       % Beispielmodelle erzeugen (examples/)
 asm_blocks_lib       % Bibliothek öffnen
+check_asm            % vollständige Prüfung (Unit-Tests + fachliche Testfälle, etwa 4 min)
 ```
 
 Im Library Browser erscheint der Eintrag **„ASM-Bausteine (Drehstrom-Asynchronmotor)“** (ggf. im
@@ -31,12 +33,14 @@ Ergebnis explizit zurückgegeben; der Base Workspace wird weder gelesen noch bes
 
 ```matlab
 P = asm_params('kloss');          % vollständiger Parametersatz: 'kloss' | 'loop' | 'lab' | 'slides'
-P.dM_L = 0;  P.t_end = 1;         % Felder dürfen geändert werden
+P.dM_L = 0;  P.t_end = 1;         % Eingabefelder dürfen geändert werden
 R = run_asm(P);                   % Simulation über Simulink.SimulationInput
 plot(R.time.t, R.time.n)          % Zeitverläufe
 R.metrics.startup                 % Hochlaufzeit bis 0,9·n_N (oder "nicht erreicht")
-R.metrics.load_step               % Laststoß: n_vor, n_min, Einbruch, n_neu, Einschwingzeit
+R.metrics.load_step               % Laststoß: n_vor, n_min/n_max, Einbruch, n_neu, Einschwingzeit
 R.metrics.expected                % erwarteter Arbeitspunkt (Kloss bzw. ESB ∩ Last)
+R.params, R.sim_input             % tatsächlich verwendete Werte und übergebene Blockparameter
+C = compare_kloss_dynamic();      % Vergleich Kloss/Raumzeigermodell beim Laststoß (Abbildung + Tabelle)
 ```
 
 | Szenario | Modell | Inhalt |
@@ -50,23 +54,50 @@ Parameterübergabe: nur über `Simulink.SimulationInput` (`setBlockParameter`, `
 zusätzliche Signale über `LoggingSpecification`; die Modelle werden nicht verändert und haben keine
 Callbacks. Der Motor wird immer mit „Benutzerdefiniert“ und expliziten Werten simuliert, damit die
 Maskeninitialisierung nicht verdeckt `asm_standard.m` liest. Bei `P.param_set = 'standard'` werden
-die Motorwerte vorher aus `asm_standard.m` in `P` übernommen (Warnung, falls andere Werte übergeben
-wurden). `R.params` enthält die tatsächlich verwendeten Werte.
+die Motorwerte vorher aus `asm_standard.m` in `P` übernommen (Warnung `asm:standard`, falls andere
+Werte übergeben wurden). Auch Solver-Einstellungen sind Parameter (`P.max_step`, `P.rel_tol`).
+`R.params` enthält die tatsächlich verwendeten Werte, `R.sim_input` das simulierte
+`SimulationInput`-Objekt.
 
-**Kennzahlen (feste Definitionen, `asmtools.speed_metrics`):**
+**Eingaben und abgeleitete Größen.** Eingaben sind alle Felder von `asm_params` außer den
+abgeleiteten. Abgeleitete Größen berechnet `run_asm` immer neu aus den verwendeten Eingaben – auch bei
+„custom“: `ns = 60·f1/p`, `w1`, `N1xi1`, die Schleifenwerte `U20`, `R2_S`, `L2s_S` (aus MK, sK, B̂_N,
+l, r, f_N, p, N2), die Bezugsdrehzahl der Lüfterlast `n_B`, das Hochlaufziel `n_target` und das
+Toleranzband `band`. Ein abweichender Wert für ein abgeleitetes Feld wird mit Warnung
+`asm:derived` ignoriert. Beispiel: `P.param_set = 'custom'; P.MK = 60` ändert auch R2 und L2σ der
+Leiterschleife, sodass Teil A und Teil B konsistent bleiben.
 
-- *Hochlaufzeit*: erstes Überschreiten von `n_target_rel·n_N` (Standard 0,9·n_N = 1296 1/min) vor dem
-  Laststoß. Wird das Ziel nicht überschritten: „nicht erreicht“ (kein Bezug auf den letzten Wert).
-- *Laststoß*: Drehzahl vor dem Stoß (Mittel 50 ms, endet 5 ms vor t_stoß, weil der Laststoß mit 0,5 ms
-  geglättet ist), minimale Drehzahl danach, Einbruch, neuer stationärer Arbeitspunkt (Mittel der letzten
-  50 ms). Eine *Einschwingzeit* wird nur angegeben, wenn das Toleranzband ±0,1 % von n_s (±1,5 1/min)
-  ab diesem Zeitpunkt bis zum Ende des Auswertefensters gehalten wird; sonst „nicht eingeschwungen“.
-- *Erwartung*: stabiler, aus der Anfangsbedingung erreichbarer Schnittpunkt von Motor- und
-  Lastmoment (`asmtools.operating_point`), vor und nach dem Laststoß.
+**Kennzahlen (feste Definitionen, `asmtools.speed_metrics`).** Zwischen den Abtastwerten gilt der
+Verlauf als stückweise linear; alle Zeitpunkte werden linear interpoliert.
+
+- *Hochlaufzeit*: erstes Erreichen von `n_target_rel·n_N` (Standard 0,9·n_N = 1296 1/min) vor dem
+  Laststoß; ein Abtastwert genau auf dem Ziel zählt als erreicht. Wird das Ziel nicht erreicht:
+  „nicht erreicht“ (kein Bezug auf den letzten Simulationswert).
+- *Stationäre Werte*: zeitliches Mittel über ein Fenster von 50 ms – vor dem Stoß bis 5 ms vor t_stoß
+  (der Laststoß ist mit 0,5 ms geglättet und wirkt bei t_stoß bereits zu 50 %), am Ende die letzten
+  50 ms. Das Fenster muss vollständig von Daten abgedeckt sein und nach dem Stoß beginnen (t_stoß +
+  5 ms); sonst gibt es keinen Wert („Endfenster zu kurz“ bzw. „überlappt den Laststoß“). Ein einzelner
+  letzter Abtastwert gilt nie als Nachweis eines stationären Zustands.
+- *Laststoß*: n_vor, minimale Drehzahl n_min danach, Einbruch n_vor − n_min, Unterschwingen
+  n_neu − n_min, neuer stationärer Arbeitspunkt n_neu und statischer Unterschied n_vor − n_neu.
+  Bei Entlastung (ΔM_L < 0) steigt die Drehzahl; dann gelten n_max und das Überschwingen n_max − n_neu.
+- *Einschwingzeit*: Zeit nach t_stoß bis zum letzten Eintritt in das Band |n − n_neu| ≤ ±0,1 % von n_s
+  (±1,5 1/min, Rand zählt als innerhalb). Sie wird nur angegeben, wenn das Band ab dann bis zum Ende
+  des Auswertefensters gehalten wird; sonst „nicht eingeschwungen“.
+- *Erwartung*: stabiler, aus der Anfangsbedingung erreichbarer Schnittpunkt von Motor- und Lastmoment
+  (`asmtools.operating_point`, gleiche geglättete Lastkennlinie wie im Lastbaustein), vor dem Stoß ab
+  n = 0, danach ab dem alten Arbeitspunkt. Liegt der Schnittpunkt im Stillstand (unter 4,8 1/min, z. B.
+  konstantes Lastmoment größer als das Anzugsmoment), meldet `run_asm` „kein erreichbarer stabiler
+  Arbeitspunkt“ (Motor läuft nicht an bzw. kippt).
 
 **Fachliche Testfälle:** `T = verify_asm()` simuliert Teil A bei s = 0, s_N, s_K, 1 und Teil B
 (Hochlauf, Laststoß) und gibt je Prüfung Sollwert, Istwert, Abweichung, Toleranz, Status und Begründung
-aus (Ergebnisse: [VALIDIERUNG.md](VALIDIERUNG.md), Abschnitt 1).
+aus (Ergebnisse: [VALIDIERUNG.md](VALIDIERUNG.md), Abschnitt 1). Status: „bestanden“, „nicht
+bestanden“, „Fehler“ (ausgewählter Test abgebrochen, z. B. Simulationsfehler oder Zeitgrenze, mit
+Fehlerkennung), „abgewählt“ (Option `Tests`), „nicht verfügbar“ (Produkt oder erzeugte Datei fehlt),
+„Info“ (Wert ohne unabhängigen Sollwert). Nur „bestanden“ zählt als bestanden.
+`verify_asm('ErrorOnFailure', true)` bricht bei „nicht bestanden“, „Fehler“ oder „nicht verfügbar“
+mit Fehler ab.
 
 ## 1b Bedienoberfläche
 
@@ -173,8 +204,12 @@ Bhat, i_mu, i2b, M, n, Om, th_mech, theta2, s (Bus Selector verwenden).
 
 ```matlab
 export_slide_figures            % alle Folienbilder nach export/ (etwa 1 min)
-benchmark_motor                 % Bilder und Kennzahlen des Modellvergleichs nach export/
+benchmark_motor                 % Bilder und Kennzahlen des Modellbenchmarks nach export/
+compare_kloss_dynamic           % n(t) Kloss gegen Raumzeigermodell beim Laststoß (vergleich_kloss_raumzeiger)
 ```
+
+Alle drei Skripte schreiben mit `'Folder', ordner` in einen anderen Ordner, z. B. zum Vergleich mit
+dem Stand in `export/`, ohne ihn zu überschreiben: `benchmark_motor('Folder', tempdir)`.
 
 Eigene Abbildungen im einheitlichen Stil (16:9, Schrift ≥ 14 pt, PNG 300 dpi und SVG):
 
@@ -192,11 +227,18 @@ Linien mit „L1“, „L2“, „L3“, „Stab 1“, „Stab 2“ im DisplayNa
 
 ```matlab
 T = verify_asm()      % fachliche Testfälle Teil A/B mit Berichtstabelle (etwa 10 s)
-runtests('tests')     % 73 Tests (davon 10 für Rechenkern und Oberfläche), etwa 3 min
+runtests('tests')     % alle Unit-Tests (etwa 3 min)
+check_asm             % beides zusammen mit Versionsprotokoll; Fehler, wenn etwas nicht besteht
 ```
 
-Kommandozeile: `matlab -batch "startup_asm; runtests('tests')"`. Ergebnisse und Befunde:
-[VALIDIERUNG.md](VALIDIERUNG.md).
+Kommandozeile (Exit-Code ≠ 0, sobald ein Unit-Test fehlschlägt oder eine Prüfzeile „nicht
+bestanden“, „Fehler“ oder „nicht verfügbar“ ist):
+
+```
+matlab -batch "startup_asm; check_asm('Log', 'check_asm.log')"
+```
+
+Ergebnisse, Laufprotokoll und Befunde: [VALIDIERUNG.md](VALIDIERUNG.md).
 
 ## 7 Typische Fehler
 
@@ -213,7 +255,7 @@ Kommandozeile: `matlab -batch "startup_asm; runtests('tests')"`. Ergebnisse und 
 
 | Ordner / Datei | Inhalt |
 |---|---|
-| `run_asm.m`, `verify_asm.m` | Simulation ohne Oberfläche, fachliche Testfälle |
+| `run_asm.m`, `verify_asm.m`, `check_asm.m` | Simulation ohne Oberfläche, fachliche Testfälle, Gesamtprüfung für Batch-Läufe |
 | `ASMApp.m` | Bedienoberfläche (programmatische App-Klasse, Abschnitt 1b) |
 | `+asmlib/` | Simscape-Quellen (.ssc): Domäne `airgap`, Unterpakete sources, machine, mechanics, sensors, reference |
 | `+asmtools/` | Bausteinkatalog (`catalog.m`), Stil, Masken, Prüfstand, Kennzahlen, Rotorstab-Formeln, Didaktik |
@@ -221,7 +263,7 @@ Kommandozeile: `matlab -batch "startup_asm; runtests('tests')"`. Ergebnisse und 
 | `+asmapp/` | Wertebereiche der Eingaben (limits, check_value) |
 | `lib/` | **generiert**: `asm_blocks_lib.slx`, `asmlib_lib.slx` |
 | `parameter/` | Parametersätze (`asm_standard.m` Motor, `asm_params.m` vollständiger Laufparametersatz) |
-| `examples/` | Beispielmodelle und Skripte (build_examples, export_slide_figures, benchmark_motor) |
+| `examples/` | Beispielmodelle und Skripte (build_examples, export_slide_figures, benchmark_motor, compare_kloss_dynamic) |
 | `tests/` | matlab.unittest-Tests |
 | `doku/` | SPEC, KONVENTIONEN, VALIDIERUNG, diese Anleitung |
 | `export/` | erzeugte Folienbilder |
@@ -231,7 +273,8 @@ Neuen Baustein anlegen: [KONVENTIONEN.md](KONVENTIONEN.md), Abschnitt 7.
 ## 9 Kompatibilität
 
 - **Bestätigt (getestet): nur MATLAB R2026b Update 1** mit Simulink 26.2, Simscape 26.2 und Simscape
-  Electrical 26.2. Alle Testergebnisse in VALIDIERUNG.md stammen aus diesem Release.
+  Electrical 26.2 unter Windows 11, belegt durch das Laufprotokoll von `check_asm` in einer frischen
+  MATLAB-Sitzung (VALIDIERUNG.md, Abschnitt 0). Alle Testergebnisse dort stammen aus diesem Release.
 - **Nicht getestet: R2023b und alle anderen älteren Releases.** R2023b ist ein Wunschziel (Labor,
   MATLAB Online der Hochschule), aber nicht bestätigt; ältere Releases waren nicht installiert.
 - Die erzeugten `.slx`-Dateien (Bibliothek, Beispiele) haben das R2026b-Format und lassen sich in

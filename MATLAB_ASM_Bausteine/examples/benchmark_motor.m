@@ -2,6 +2,7 @@ function V = benchmark_motor(opt)
 %BENCHMARK_MOTOR Model benchmark of the block "ASM Standard" with key figures and slide figures.
 %   V = benchmark_motor()                  computes V1 to V6, shows the table, exports figures
 %   V = benchmark_motor('Export', false)   without figure export
+%   V = benchmark_motor('Folder', folder)   figures into another folder (default export/)
 %
 %   Comparisons (doku/SPEC.md 4.6, results in doku/VALIDIERUNG.md). These are model-to-model
 %   comparisons with the same example parameters (benchmark / consistency), not an experimental
@@ -18,6 +19,7 @@ function V = benchmark_motor(opt)
 
 arguments
     opt.Export (1,1) logical = true
+    opt.Folder {mustBeTextScalar} = asmexport.output_folder()
 end
 
 load_system('asm_blocks_lib');
@@ -108,7 +110,7 @@ plot(t, nE, '-', 'Color', S.colour.L2, 'LineWidth', 3, 'DisplayName', 'Referenz 
 plot(t, nA, '--', 'Color', S.colour.L1, 'DisplayName', 'ASM Standard (Raumzeigermodell)');
 yline(ns, ':', 'n_s'); grid on; xlabel('t in s'); ylabel('n in 1/min');
 legend('Location', 'southeast'); title('Hochlauf am starren Netz, Lüfterlast, Laststoß bei t = 1 s');
-asmexport.slide_figure(f, 'validierung_hochlauf_n'); close(f);
+asmexport.slide_figure(f, 'validierung_hochlauf_n', 'Folder', opt.Folder); close(f);
 
 f = figure('Visible', 'off');
 plot(t, ME, '-', 'Color', S.colour.L2, 'LineWidth', 3, 'DisplayName', 'Referenz ee\_lib'); hold on;
@@ -116,7 +118,7 @@ plot(t, MA, '--', 'Color', S.colour.L1, 'DisplayName', 'ASM Standard');
 plot(t, MKl, ':', 'Color', [0.4 0.4 0.4], 'DisplayName', 'Kloss');
 grid on; xlabel('t in s'); ylabel('M in N·m'); xlim([0 1.5]);
 legend('Location', 'northeast'); title('Wellenmoment beim direkten Einschalten (Drehmomentmesswelle)');
-asmexport.slide_figure(f, 'validierung_hochlauf_M'); close(f);
+asmexport.slide_figure(f, 'validierung_hochlauf_M', 'Folder', opt.Folder); close(f);
 
 f = figure('Visible', 'off');
 n_v = linspace(0, ns, 600); s_v = (ns - n_v)/ns;
@@ -126,7 +128,7 @@ plot(ns*(1 - s1), M1, 'o', 'Color', S.colour.L2, 'MarkerSize', 10, 'LineWidth', 
 plot(HA.n(:,2), HA.meas.M(:,2), '-', 'Color', [0.75 0.75 0.75], 'LineWidth', 0.5, 'DisplayName', 'Hochlauf (dynamisch)');
 grid on; xlabel('n in 1/min'); ylabel('M in N·m'); xlim([0 ns]);
 legend('Location', 'northwest'); title('Drehmoment-Drehzahl-Kennlinie');
-asmexport.slide_figure(f, 'validierung_kennlinie'); close(f);
+asmexport.slide_figure(f, 'validierung_kennlinie', 'Folder', opt.Folder); close(f);
 
 f = figure('Visible', 'off');
 iw = tm >= 1 - T2 & tm <= 1;
@@ -138,8 +140,8 @@ legend('Location', 'eastoutside'); title(sprintf('Leiterschleife im Bemessungsbe
 nexttile; plot(tm(iw), R.M_S(iw), 'DisplayName', 'M_S Schleife (Stab 1 + Stab 2)'); hold on;
 plot(tm(iw), 2/P.N2*m.M(iw, 2), '--', 'DisplayName', '2/N_2 · M (Motor)'); grid on; xlabel('t in s'); ylabel('M in N·m');
 legend('Location', 'eastoutside');
-asmexport.slide_figure(f, 'validierung_rotorstab'); close(f);
-fprintf('Folienbilder in %s\n', asmexport.output_folder());
+asmexport.slide_figure(f, 'validierung_rotorstab', 'Folder', opt.Folder); close(f);
+fprintf('Folienbilder in %s\n', opt.Folder);
 end
 
 function m = window_mean(x, t0, t1)

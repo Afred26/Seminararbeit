@@ -11,7 +11,9 @@ function R = rated_point(P)
 %   EC fit); the fields alt_* quantify this. The function changes no parameter.
 %
 %   Returns R with s_N, M_kloss_sN, M_N, dev_rel (M_kloss_sN/M_N - 1), M_N_from_PN,
-%   s_at_MN, n_at_MN (Kloss, stable branch), M_ec_sN, n_at_MN_ec (T equivalent circuit),
+%   s_at_MN, n_at_MN (speed at which the Kloss torque equals M_N, stable branch), M_ec_sN,
+%   n_at_MN_ec (same for the T equivalent circuit), n_op_fan_kloss, n_op_fan_ec (operating
+%   point with the fan load of the examples, M_B = M_N at n_B = n_N, reached from standstill),
 %   sK_squared_equals_sN, alt_sK (struct sK, M_A, M_at_0p1), alt_MK (struct MK, k, M_A, M_at_0p1),
 %   base (struct MK, sK, M_A, M_at_0p1).
 
@@ -29,6 +31,13 @@ R.s_at_MN = P.sK*(k - sqrt(k^2 - 1));
 R.n_at_MN = ns*(1 - R.s_at_MN);
 R.M_ec_sN = asmtools.equivalent_circuit(P, R.s_N);
 R.n_at_MN_ec = ns*(1 - fzero(@(s) asmtools.equivalent_circuit(P, s) - P.M_N, [1e-4, P.sK]));
+% operating point with the load actually used in the examples: fan load M_B*(n/n_B)^2 with
+% M_B = M_N at n_B = n_N (not the same as the speed at which the motor torque equals M_N)
+fan = @(n) P.M_N*(n/P.n_N).^2;
+op = asmtools.operating_point(@(n) kl((ns - n)/ns, P.MK, P.sK), fan, ns, 0);
+R.n_op_fan_kloss = op.n;
+op = asmtools.operating_point(@(n) asmtools.equivalent_circuit(P, (ns - n)/ns), fan, ns, 0);
+R.n_op_fan_ec = op.n;
 
 R.base   = struct('MK', P.MK, 'sK', P.sK, 'M_A', kl(1, P.MK, P.sK), 'M_at_0p1', kl(0.1, P.MK, P.sK));
 sK_a = R.s_N*(k + sqrt(k^2 - 1));

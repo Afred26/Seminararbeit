@@ -535,7 +535,9 @@ classdef ASMApp < handle
                 plot(ax(2), Z.t, Z.F(:, 2), '--', 'Color', S.colour.bar2, 'DisplayName', 'F Stab 2');
                 ylabel(ax(2), 'F in N');
                 plot(ax(3), Z.t, Z.M_S, '-', 'Color', S.colour.force, 'DisplayName', 'M_S (Schleife)');
-                yline(ax(3), R.metrics.M_S_mean, '--', 'Color', [0.4 0.4 0.4], 'DisplayName', 'Mittelwert');
+                if isfinite(R.metrics.M_S_mean)               % no mean without a whole field revolution
+                    yline(ax(3), R.metrics.M_S_mean, '--', 'Color', [0.4 0.4 0.4], 'DisplayName', 'Mittelwert');
+                end
                 ylabel(ax(3), 'M_S in N·m');
                 titles = {'Flussdichte senkrecht zur Schleife (rot) und Stabstrom (blau, positiv aus der Zeichenebene) – Folie 16', ...
                           'Kraft auf die Stäbe (positiv in Feldrichtung)', 'Moment der Leiterschleife'};
@@ -650,7 +652,7 @@ classdef ASMApp < handle
 
         function show_metrics(app)
             R = app.Result;  K = R.metrics;  P = R.params;
-            z = @(x) sprintf('%.4g', x);
+            z = @(x) value_text(x);
             if strcmp(R.scenario, 'lab')
                 D = {
                     'Synchrondrehzahl', 'n_s', z(K.ns), '1/min', '60·f1/p'
@@ -660,17 +662,26 @@ classdef ASMApp < handle
                     'Leiterstrom am Ende (eff.)', 'I', z(K.I_eff_end), 'A', 'Strommessung 3~'
                     sprintf('Hochlaufzeit bis %g %% von n_N (%.0f 1/min)', 100*P.n_target_rel, P.n_target), ...
                         't_H', reached_text(K.startup), 's', 'erstes Überschreiten vor dem Laststoß'
-                    'erwarteter Arbeitspunkt (ESB ∩ Last)', 'n_1', z(K.expected.before.n), '1/min', ...
+                    'erwarteter Arbeitspunkt (ESB ∩ Last)', 'n_1', operating_text(K.expected.before), '1/min', ...
                         'stabiler, aus n = 0 erreichbarer Schnittpunkt'};
                 if ~isempty(K.load_step)
                     L = K.load_step;
+                    if L.step_sign >= 0                       % load increase: minimum and dip
+                        extreme = {'minimale Drehzahl nach dem Laststoß', 'n_min', z(L.n_min), '1/min', ...
+                                   sprintf('bei t = %.4g s', L.t_min)
+                                   'Drehzahleinbruch', 'Δn', z(L.dn_dip), '1/min', 'n_vor − n_min'
+                                   'Unterschwingen', 'Δn_u', z(L.undershoot), '1/min', 'n_neu − n_min'};
+                    else                                      % load decrease: maximum and overshoot
+                        extreme = {'maximale Drehzahl nach der Entlastung', 'n_max', z(L.n_max), '1/min', ...
+                                   sprintf('bei t = %.4g s', L.t_max)
+                                   'Drehzahlanstieg', 'Δn', z(-L.dn_static), '1/min', 'n_neu − n_vor'
+                                   'Überschwingen', 'Δn_ü', z(L.overshoot), '1/min', 'n_max − n_neu'};
+                    end
                     D = [D; {
                         'Drehzahl vor dem Laststoß', 'n_vor', z(L.n_before), '1/min', ...
-                            sprintf('Mittel %g ms, endet %g ms vor t_stoß', 1e3*P.window, 1e3*P.step_margin)
-                        'minimale Drehzahl nach dem Laststoß', 'n_min', z(L.n_min), '1/min', sprintf('bei t = %.4g s', L.t_min)
-                        'Drehzahleinbruch', 'Δn', z(L.dn_dip), '1/min', 'n_vor − n_min'
+                            sprintf('Mittel %g ms, endet %g ms vor t_stoß', 1e3*P.window, 1e3*P.step_margin)}; extreme; {
                         'neuer stationärer Arbeitspunkt', 'n_neu', z(L.n_new), '1/min', ...
-                            sprintf('Simulation; erwartet (ESB) %.5g 1/min', K.expected.after.n)
+                            sprintf('Simulation; erwartet (ESB) %s 1/min', operating_text(K.expected.after))
                         sprintf('Einschwingzeit (±%.2g 1/min)', L.band), 't_s', settle_text(L), 's', ...
                             'Band bis zum Ende des Auswertefensters gehalten'}];
                 end
@@ -705,8 +716,22 @@ function t = reached_text(S)
 if S.reached, t = sprintf('%.4g', S.t_target); else, t = 'nicht erreicht'; end
 end
 
+function t = value_text(x)
+if isnan(x), t = 'nicht bestimmbar'; else, t = sprintf('%.4g', x); end
+end
+
+function t = operating_text(op)
+if op.reachable, t = sprintf('%.5g', op.n); else, t = 'kein Arbeitspunkt (Motor steht)'; end
+end
+
 function t = settle_text(L)
-if L.settled, t = sprintf('%.4g', L.t_settle); else, t = 'nicht eingeschwungen'; end
+if L.settled
+    t = sprintf('%.4g', L.t_settle);
+elseif ~L.final_valid
+    t = 'nicht bestimmbar (Endfenster zu kurz)';
+else
+    t = 'nicht eingeschwungen';
+end
 end
 
 function gl = grid_layout(parent, rows, cols)
